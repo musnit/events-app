@@ -26,6 +26,7 @@ CACHE_FILE = os.path.join(ROOT, "cache.json")
 PARTIFUL_FILE = os.path.join(ROOT, ".partiful.json")
 LUMA_CALS_FILE = os.path.join(ROOT, ".luma_calendars.json")
 LUMA_ICS_FILE = os.path.join(ROOT, ".luma_ics.json")
+LUMA_GOING_FILE = os.path.join(ROOT, ".luma_going.json")
 PARTIFUL_CAL = {"api_id": "partiful", "name": "Partiful", "slug": None, "avatar_url": None,
                 "tint_color": "#ff5c8a", "url": "https://partiful.com/events", "source": "partiful"}
 API = "https://api.luma.com"
@@ -215,9 +216,9 @@ def add_luma_calendars_from_text(text):
 
 
 def import_luma_calendars(payload):
-    """Accept the raw /home/get-following-calendars JSON (from the bookmarklet) and store every calendar in it."""
+    """Accept the bookmarklet payload (raw or compacted following-calendars JSON) and store every calendar in it."""
     cals = []
-    find_cal_objects(payload, cals)
+    find_cal_objects(payload.get("calendars", payload) if isinstance(payload, dict) else payload, cals)
     stored = load_json(LUMA_CALS_FILE, [])
     known = {c["api_id"] for c in stored}
     added = 0
@@ -472,6 +473,10 @@ def fetch_all(session_key, errors_out=None):
             mine = luma_paginated("/home/get-events", {"period": "future"}, session_key)
         except LumaError as e:
             errors.append(f"my events: {e}")
+    for evid in load_json(LUMA_GOING_FILE, []):
+        if evid in events:
+            events[evid]["going"] = True
+            events[evid]["guest_status"] = events[evid].get("guest_status") or "registered"
     ics_cfg = load_json(LUMA_ICS_FILE)
     if ics_cfg:
         try:
@@ -724,10 +729,22 @@ class Handler(BaseHTTPRequestHandler):
                 threading.Thread(target=refresh, daemon=True).start()
                 return self.send_json({"ok": True})
             if path == "/api/luma/import":
-                added, total = import_luma_calendars(body.get("payload"))
-                if added:
-                    threading.Thread(target=refresh, daemon=True).start()
-                return self.send_json({"added": added, "total": total})
+                payload = body.get("payload") or {}
+                added, total = import_luma_calendars(payload)
+                session_ok = False
+                key = (payload.get("session_key") or "").strip() if isinstance(payload, dict) else ""
+                if key:
+                    try:
+                        luma("/home/get-events", {"period": "future", "pagination_limit": 1}, session_key=key)
+                        save_session({"session_key": key, "email": "bookmarklet", "saved_at": datetime.now(timezone.utc).isoformat()})
+                        session_ok = True
+                    except LumaError:
+                        pass
+                going = payload.get("going") if isinstance(payload, dict) else None
+                if isinstance(going, list):
+                    save_json(LUMA_GOING_FILE, [g for g in going if isinstance(g, str) and g.startswith("evt-")])
+                threading.Thread(target=refresh, daemon=True).start()
+                return self.send_json({"added": added, "total": total, "session": session_ok})
             if path == "/api/luma/ics":
                 url = (body.get("url") or "").strip()
                 if not url:

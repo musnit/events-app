@@ -27,24 +27,44 @@
   <section id="signin" hidden>
     <button id="back-btn" class="quiet" hidden>← back to calendar</button>
 
-    <h2>Luma calendars</h2>
-    <p>Paste links to the Luma calendars you follow. In the Luma app open a calendar, tap <b>Share</b>, then <b>Copy link</b>. You can paste several at once, or a whole message with links in it.</p>
-    <form id="luma-links-form">
-      <textarea id="luma-links" rows="3" placeholder="https://luma.com/…  (one or many)"></textarea>
-      <button type="submit">Add</button>
-    </form>
-    <p id="luma-links-msg" class="msg"></p>
+    <h2>Luma</h2>
+    <p>Luma has no way for another app to ask "who does this person follow", so a one-time bookmark does it from your own logged-in browser. Tap it once on luma.com and every calendar you follow lands here. Setup takes about a minute.</p>
+    <div class="platform-tabs"><button data-pick="ios">iPhone</button><button data-pick="android">Android</button><button data-pick="desktop">Computer</button></div>
+    <ol class="steps" data-platform="ios" hidden>
+      <li>Tap <b>Copy bookmarklet</b> below.</li>
+      <li>Tap Safari's <b>Share</b> button → <b>Add Bookmark</b> → Save. (It bookmarks this page; that's fine.)</li>
+      <li>Open <b>Bookmarks</b> (book icon) → <b>Edit</b> → tap the new bookmark → clear the <b>Address</b> field and paste. Tap Done.</li>
+      <li>Go to <a href="https://luma.com/home" target="_blank" rel="noopener">luma.com/home</a>, make sure you are signed in, then open Bookmarks and tap that bookmark. You will land back here with everything imported.</li>
+    </ol>
+    <ol class="steps" data-platform="android" hidden>
+      <li>Tap <b>Copy bookmarklet</b> below.</li>
+      <li>In Chrome, tap ⋮ → ☆ to bookmark this page, then ⋮ → Bookmarks → ⋮ on it → Edit. Replace the URL with what you copied and name it "Import Luma".</li>
+      <li>Open <a href="https://luma.com/home" target="_blank" rel="noopener">luma.com/home</a> signed in, tap the address bar, type <b>Import Luma</b>, and pick the bookmark from the suggestions.</li>
+    </ol>
+    <ol class="steps" data-platform="desktop" hidden>
+      <li>Drag the <b>Import Luma follows</b> link below onto your bookmarks bar (or copy it and create a bookmark with it as the address).</li>
+      <li>Open <a href="https://luma.com/home" target="_blank" rel="noopener">luma.com/home</a> signed in and click the bookmark.</li>
+    </ol>
+    <div class="row-wrap">
+      <button type="button" id="copy-bookmarklet">Copy bookmarklet</button>
+      <a id="bookmarklet" href="#" data-platform="desktop" hidden>Import Luma follows</a>
+    </div>
+    <textarea id="bm-text" rows="3" readonly hidden></textarea>
+    <p id="import-msg" class="msg"></p>
+    <p id="luma-status" class="msg"></p>
     <ul id="luma-manual" class="cal-chips"></ul>
 
-    <details class="alt"><summary>Import everything I follow in one go</summary>
-      <p>Luma only shows the list of calendars you follow when you are logged in, so this needs your browser.</p>
-      <p><b>Bookmarklet.</b> Save this link as a bookmark, then open it while on luma.com. It reads your followed list and sends you back here with it. On iPhone: bookmark any page, then edit the bookmark and replace its address with the copied text.</p>
-      <div class="row-wrap">
-        <a id="bookmarklet" href="#">Import Luma follows</a>
-        <button type="button" id="copy-bookmarklet">Copy bookmarklet</button>
-      </div>
-      <p><b>Or, on a computer,</b> sign in at luma.com, open DevTools → Application/Storage → Cookies → luma.com, copy <code>luma.auth-session-key</code>, and paste it here. This also keeps the list in sync as you follow new calendars.</p>
-      <p id="luma-status" class="msg"></p>
+    <details class="alt"><summary>Add single calendars by link</summary>
+      <p>Paste one or more luma.com calendar links. In the Luma app: open a calendar → Share → Copy link.</p>
+      <form id="luma-links-form">
+        <textarea id="luma-links" rows="2" placeholder="https://luma.com/…"></textarea>
+        <button type="submit">Add</button>
+      </form>
+      <p id="luma-links-msg" class="msg"></p>
+    </details>
+
+    <details class="alt"><summary>Paste a Luma session cookie (computer only)</summary>
+      <p>Sign in at luma.com, open DevTools → Application/Storage → Cookies → luma.com, copy <code>luma.auth-session-key</code>, paste it here. The followed list and your RSVPs then sync on their own.</p>
       <form id="session-form">
         <input type="text" id="session-key" placeholder="luma.auth-session-key value" autocomplete="off">
         <button type="submit">Use session</button>

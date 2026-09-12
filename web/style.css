@@ -60,3 +60,7 @@ main { padding:16px; }
 .row-wrap { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:8px 0; }
 #bookmarklet { display:inline-block; padding:6px 10px; border:1px dashed var(--accent); border-radius:6px; color:var(--accent); text-decoration:none; }
 @media (max-width:600px) { header { padding:8px 10px; } nav button, nav a { padding:5px 8px; } .day { min-height:70px; } .ev .t { display:none; } main { padding:8px; } }
+.platform-tabs { display:flex; gap:6px; margin:8px 0; }
+.platform-tabs button.on { border-color:var(--accent); color:var(--accent); }
+.steps li { margin-bottom:6px; }
+#bm-text { width:100%; font-size:11px; }
