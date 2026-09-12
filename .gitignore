@@ -1,0 +1,5 @@
+.session.json
+.session.json.tmp
+cache.json
+cache.json.tmp
+__pycache__/

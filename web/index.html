@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Events · Luma + Partiful</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="brand">Events · Luma + Partiful</div>
+  <nav id="nav" hidden>
+    <button id="prev" title="Previous month">‹</button>
+    <button id="today">Today</button>
+    <button id="next" title="Next month">›</button>
+    <span id="month-label"></span>
+    <span class="spacer"></span>
+    <label class="toggle"><input type="checkbox" id="going-only"> going only</label>
+    <button id="view-toggle">List</button>
+    <button id="refresh" title="Pull fresh data from Luma">↻</button>
+    <a id="ics" href="feed.ics" title="Subscribe in Google/Apple Calendar">.ics</a>
+    <button id="sources-btn" class="quiet">sources</button>
+  </nav>
+</header>
+
+<main>
+  <section id="signin" hidden>
+    <button id="back-btn" class="quiet" hidden>← back to calendar</button>
+    <h2>Luma</h2>
+    <p id="luma-status" class="msg"></p>
+    <p>Luma's public API cannot see calendars you follow, so this app signs in with your Luma email code, exactly like luma.com does. The session key stays on this server.</p>
+    <form id="email-form">
+      <input type="email" id="email" placeholder="you@example.com" required autocomplete="email">
+      <button type="submit">Send code</button>
+    </form>
+    <form id="code-form" hidden>
+      <p>Enter the code Luma emailed you.</p>
+      <input type="text" id="code" inputmode="numeric" placeholder="123456" required autocomplete="one-time-code">
+      <button type="submit">Sign in</button>
+    </form>
+    <form id="tfa-form" hidden>
+      <p>Two-factor code from your authenticator app.</p>
+      <input type="text" id="tfa" inputmode="numeric" placeholder="123456" required>
+      <button type="submit">Verify</button>
+    </form>
+    <p id="signin-msg" class="msg"></p>
+    <button id="signout" class="quiet" hidden>sign out of Luma</button>
+
+    <h2>Partiful</h2>
+    <p>Partiful has no API, but it gives every account a personal calendar feed. On any Partiful event page click the calendar icon, choose <b>Google Calendar</b>, then <b>Copy Link</b>. Paste that link here. It covers the events you are invited to, going to, or hosting, per your Partiful calendar-sync preferences.</p>
+    <form id="partiful-form">
+      <input type="url" id="partiful-url" placeholder="webcal://calendars.partiful.com/getCalendar?id=…">
+      <button type="submit">Save</button>
+      <button type="button" id="partiful-clear" class="quiet">remove</button>
+    </form>
+    <p id="partiful-msg" class="msg"></p>
+  </section>
+
+  <section id="app" hidden>
+    <aside id="sidebar">
+      <div class="side-head">Calendars <button id="all-cals" class="quiet">all</button> <button id="no-cals" class="quiet">none</button></div>
+      <ul id="cal-list"></ul>
+      <p id="status" class="msg"></p>
+    </aside>
+    <div id="grid"></div>
+    <div id="list" hidden></div>
+  </section>
+</main>
+
+<div id="popover" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>

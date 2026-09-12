@@ -1,0 +1,13 @@
+[Unit]
+Description=Luma followed-calendars view
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ubuntu/luma-cal
+ExecStart=/usr/bin/python3 /home/ubuntu/luma-cal/server.py
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
