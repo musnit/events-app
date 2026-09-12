@@ -109,7 +109,7 @@ function renderSidebar() {
 $('#all-cals').onclick = () => { state.hidden.clear(); renderSidebar(); renderMain(); };
 $('#no-cals').onclick = () => { state.data.calendars.forEach(c => state.hidden.add(c.api_id)); renderSidebar(); renderMain(); };
 $('#going-only').onchange = (e) => { state.goingOnly = e.target.checked; renderMain(); };
-function setView(v) { state.view = v; ['day','grid','list'].forEach(x => $('#view-' + x).classList.toggle('on', x === v)); renderMain(); }
+function setView(v) { state.view = v; localStorage.setItem('view', v); ['day','grid','list'].forEach(x => $('#view-' + x).classList.toggle('on', x === v)); renderMain(); }
 $('#view-grid').onclick = () => { state.month = startOfMonth(new Date()); setView('grid'); };
 $('#view-list').onclick = () => { state.month = startOfMonth(new Date()); setView('list'); };
 $('#view-day').onclick = () => { state.day = new Date(); setView('day'); };
@@ -269,5 +269,7 @@ async function handleImportHash() {
   return true;
 }
 
+const initialView = new URLSearchParams(location.search).get('view') || localStorage.getItem('view');
+if (['day','grid','list'].includes(initialView)) { state.view = initialView; ['day','grid','list'].forEach(x => $('#view-' + x).classList.toggle('on', x === initialView)); }
 handleImportHash().then(done => { if (!done) load(); });
 setInterval(() => { if (state.data?.signed_in && document.visibilityState === 'visible') load(); }, 5 * 60 * 1000);

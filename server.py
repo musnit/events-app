@@ -669,7 +669,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("content-type", MIME.get(os.path.splitext(fp)[1], "application/octet-stream"))
         self.send_header("content-length", str(len(body)))
-        self.send_header("cache-control", "no-cache")
+        self.send_header("cache-control", "no-store, must-revalidate")
         self.end_headers()
         self.wfile.write(body)
 
