@@ -75,10 +75,12 @@ function render(s) {
   $('#app').hidden = !showApp;
   $('#nav').hidden = !s.signed_in;
   $('#back-btn').hidden = !s.signed_in;
-  $('#luma-status').textContent = s.luma_signed_in ? `Signed in as ${s.email}.` : 'Not signed in.';
+  $('#luma-status').textContent = s.luma_signed_in ? `Luma session active (${s.email}); followed list syncs automatically.` : '';
   $('#email-form').hidden = s.luma_signed_in; $('#session-form').hidden = s.luma_signed_in; $('#signout').hidden = !s.luma_signed_in;
   if (!s.luma_signed_in) { $('#code-form').hidden = true; $('#tfa-form').hidden = true; }
   if (s.partiful_url && !$('#partiful-url').value) $('#partiful-url').value = s.partiful_url;
+  if (s.luma_ics_url && !$('#luma-ics-url').value) $('#luma-ics-url').value = s.luma_ics_url;
+  renderManual(s.luma_manual || []);
   if (!showApp) return;
   s.calendars.forEach((c, i) => { c.color = c.tint_color && c.tint_color !== '#1e1e1e' ? c.tint_color : PALETTE[i % PALETTE.length]; });
   renderSidebar();
@@ -188,5 +190,53 @@ function showPopover(e, ev) {
 document.addEventListener('click', (ev) => { if (!$('#popover').contains(ev.target)) $('#popover').hidden = true; });
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') $('#popover').hidden = true; });
 
-load();
+const APP_URL = location.origin + location.pathname.replace(/[^/]*$/, '');
+const BOOKMARKLET = `javascript:(async()=>{try{if(!/luma\\.com$|lu\\.ma$/.test(location.hostname)){alert('Open luma.com first, then tap this bookmark.');return;}const r=await fetch('https://api.luma.com/home/get-following-calendars',{credentials:'include'});if(!r.ok){alert('Luma says '+r.status+'. Are you signed in?');return;}const d=await r.json();location.href=${JSON.stringify(APP_URL)}+'#import='+encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(d)))));}catch(e){alert('Import failed: '+e);}})()`;
+$('#bookmarklet').href = BOOKMARKLET;
+$('#bookmarklet').onclick = (e) => { e.preventDefault(); alert('Drag this to your bookmarks bar, or use "Copy bookmarklet" and paste it as a bookmark address.'); };
+$('#copy-bookmarklet').onclick = async () => { try { await navigator.clipboard.writeText(BOOKMARKLET); $('#copy-bookmarklet').textContent = 'Copied'; } catch { prompt('Copy this:', BOOKMARKLET); } };
+
+$('#luma-links-form').onsubmit = async (e) => {
+  e.preventDefault();
+  $('#luma-links-msg').textContent = 'Looking up calendars…';
+  try {
+    const r = await api('api/luma/calendars', { text: $('#luma-links').value });
+    $('#luma-links').value = '';
+    $('#luma-links-msg').textContent = `Added ${r.added.length}` + (r.failed.length ? `. Skipped: ${r.failed.join('; ')}` : '.');
+    setTimeout(load, 1500);
+  } catch (err) { $('#luma-links-msg').textContent = err.message; }
+};
+$('#luma-ics-form').onsubmit = async (e) => {
+  e.preventDefault();
+  $('#luma-ics-msg').textContent = 'Checking feed…';
+  try { const r = await api('api/luma/ics', { url: $('#luma-ics-url').value.trim() }); $('#luma-ics-msg').textContent = `Saved. ${r.events} upcoming events you're going to.`; setTimeout(load, 1500); }
+  catch (err) { $('#luma-ics-msg').textContent = err.message; }
+};
+$('#luma-ics-clear').onclick = async () => { await api('api/luma/ics', { url: '' }); $('#luma-ics-url').value = ''; $('#luma-ics-msg').textContent = 'Removed.'; load(); };
+
+function renderManual(list) {
+  const ul = $('#luma-manual'); ul.innerHTML = '';
+  list.forEach(c => {
+    const li = document.createElement('li');
+    li.innerHTML = (c.avatar_url ? `<img src="${c.avatar_url}" alt="">` : '') + `<span>${escapeHtml(c.name)}</span><button title="remove">✕</button>`;
+    li.querySelector('button').onclick = async () => { await api('api/luma/calendars/remove', { api_id: c.api_id }); load(); };
+    ul.appendChild(li);
+  });
+}
+
+async function handleImportHash() {
+  const m = location.hash.match(/^#import=(.+)$/);
+  if (!m) return false;
+  history.replaceState(null, '', location.pathname);
+  try {
+    const payload = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1])))));
+    const r = await api('api/luma/import', { payload });
+    state.showSources = true;
+    await load();
+    $('#luma-links-msg').textContent = `Imported ${r.added} new calendars from your Luma follows (${r.total} total).`;
+  } catch (err) { state.showSources = true; await load(); $('#luma-links-msg').textContent = 'Import failed: ' + err.message; }
+  return true;
+}
+
+handleImportHash().then(done => { if (!done) load(); });
 setInterval(() => { if (state.data?.signed_in && document.visibilityState === 'visible') load(); }, 5 * 60 * 1000);

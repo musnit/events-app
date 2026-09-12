@@ -6,6 +6,7 @@ luma.com frontend does (email code) and then reads the same internal endpoints t
 It binds to 127.0.0.1 and expects nginx to strip a /luma/ prefix and handle auth (Authelia).
 """
 import json
+import re
 import os
 import sys
 import threading
@@ -23,6 +24,8 @@ WEB = os.path.join(ROOT, "web")
 SESSION_FILE = os.path.join(ROOT, ".session.json")
 CACHE_FILE = os.path.join(ROOT, "cache.json")
 PARTIFUL_FILE = os.path.join(ROOT, ".partiful.json")
+LUMA_CALS_FILE = os.path.join(ROOT, ".luma_calendars.json")
+LUMA_ICS_FILE = os.path.join(ROOT, ".luma_ics.json")
 PARTIFUL_CAL = {"api_id": "partiful", "name": "Partiful", "slug": None, "avatar_url": None,
                 "tint_color": "#ff5c8a", "url": "https://partiful.com/events", "source": "partiful"}
 API = "https://api.luma.com"
@@ -120,6 +123,152 @@ def luma_paginated(path, params, session_key, max_pages=20):
         if not res.get("has_more") or not res.get("next_cursor"):
             break
         cursor = res["next_cursor"]
+    return out
+
+
+# ---------- small json stores ----------
+
+def load_json(path, default=None):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return default
+
+
+def save_json(path, obj):
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(obj, f)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+
+
+# ---------- luma calendars added by link ----------
+
+LUMA_LINK_RE = re.compile(r"(?:https?://)?(?:www\.)?(?:lu\.ma|luma\.com)/([A-Za-z0-9_./-]+)|\b(cal-[A-Za-z0-9]{10,20})\b")
+
+
+def find_cal_objects(obj, out):
+    """Collect every dict that looks like a Luma calendar (api_id cal-…) from nested JSON."""
+    if isinstance(obj, dict):
+        if str(obj.get("api_id", "")).startswith("cal-") and "name" in obj:
+            out.append(obj)
+            return
+        for v in obj.values():
+            find_cal_objects(v, out)
+    elif isinstance(obj, list):
+        for v in obj:
+            find_cal_objects(v, out)
+
+
+def resolve_luma_link(token):
+    """Turn a luma.com slug/path or cal- id into a normalized calendar dict, or raise ValueError."""
+    if token.startswith("cal-"):
+        entries = luma_paginated("/calendar/get-items", {"calendar_api_id": token, "period": "future"}, None, max_pages=1)
+        for en in entries:
+            if isinstance(en.get("calendar"), dict):
+                return normalize_calendar(en["calendar"])
+        return {"api_id": token, "name": token, "slug": None, "avatar_url": None, "tint_color": None, "url": "https://luma.com/" + token}
+    slug = token.strip("/").split("?")[0]
+    req = urllib.request.Request("https://luma.com/" + slug, headers={"user-agent": UA, "accept": "text/html"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        html = r.read().decode("utf-8", errors="replace")
+    m = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html, re.S)
+    if not m:
+        raise ValueError("no page data")
+    cals = []
+    find_cal_objects(json.loads(m.group(1)).get("props", {}).get("pageProps", {}), cals)
+    if not cals:
+        raise ValueError("that link is not a Luma calendar")
+    # Prefer the calendar whose slug matches the link; else the first one on the page.
+    cal = next((c for c in cals if c.get("slug") == slug.split("/")[-1]), cals[0])
+    return normalize_calendar(cal)
+
+
+def add_luma_calendars_from_text(text):
+    stored = load_json(LUMA_CALS_FILE, [])
+    known = {c["api_id"] for c in stored}
+    added, failed = [], []
+    seen = set()
+    for m in LUMA_LINK_RE.finditer(text):
+        token = m.group(2) or m.group(1)
+        if not token or token in seen:
+            continue
+        seen.add(token)
+        if token.split("/")[0] in ("user", "discover", "signin", "home", "settings", "create", "event", "e"):
+            failed.append(f"{token}: not a calendar link")
+            continue
+        try:
+            cal = resolve_luma_link(token)
+        except Exception as e:
+            failed.append(f"{token}: {e}")
+            continue
+        if not cal or cal["api_id"] in known:
+            continue
+        cal["manual"] = True
+        stored.append(cal)
+        known.add(cal["api_id"])
+        added.append(cal)
+    save_json(LUMA_CALS_FILE, stored)
+    return added, failed
+
+
+def import_luma_calendars(payload):
+    """Accept the raw /home/get-following-calendars JSON (from the bookmarklet) and store every calendar in it."""
+    cals = []
+    find_cal_objects(payload, cals)
+    stored = load_json(LUMA_CALS_FILE, [])
+    known = {c["api_id"] for c in stored}
+    added = 0
+    for c in cals:
+        n = normalize_calendar(c)
+        if n and n["api_id"] not in known:
+            n["manual"] = True
+            stored.append(n)
+            known.add(n["api_id"])
+            added += 1
+    save_json(LUMA_CALS_FILE, stored)
+    return added, len(stored)
+
+
+def normalize_luma_ics_url(url):
+    """Accept the raw ics/get link, a webcal:// form, or a Google 'add by URL' link carrying cid=."""
+    url = url.strip()
+    m = re.search(r"[?&]cid=([^&]+)", url)
+    if m and "google.com" in url:
+        url = urllib.parse.unquote(m.group(1))
+    if url.startswith("webcal://"):
+        url = "https://" + url[len("webcal://"):]
+    if "/ics/get" not in url or "luma" not in url and "lu.ma" not in url:
+        raise ValueError("expected a Luma iCal subscription link (…/ics/get?entity=user&id=…)")
+    return url
+
+
+def fetch_luma_ics(url):
+    """Return the set of event api_ids the user is registered for, from their personal Luma feed."""
+    req = urllib.request.Request(url, headers={"user-agent": UA, "accept": "text/calendar,*/*"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        text = r.read().decode("utf-8", errors="replace")
+    if "BEGIN:VCALENDAR" not in text:
+        raise ValueError("that URL did not return an iCalendar feed")
+    out = {}
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    for ve in parse_ics(text):
+        uid = ve.get("UID", "")
+        evid = uid.split("@")[0] if uid.startswith("evt-") else None
+        start, all_day = ics_parse_dt(ve.get("DTSTART", ""), ve.get("DTSTART__params", {}))
+        if not start or start < cutoff:
+            continue
+        end, _ = ics_parse_dt(ve.get("DTEND", ""), ve.get("DTEND__params", {})) if ve.get("DTEND") else (None, False)
+        out[evid or ("luma-ics-" + uid)] = {
+            "api_id": evid or ("luma-ics-" + uid), "name": ics_unescape(ve.get("SUMMARY", "")),
+            "url": ve.get("URL") or ("https://luma.com/" + evid if evid else "https://luma.com/home"),
+            "start_at": start, "end_at": end, "timezone": None, "all_day": all_day, "cover_url": None,
+            "location_type": "offline" if ve.get("LOCATION") else "unknown",
+            "city": ics_unescape(ve.get("LOCATION", "")) or None, "hosts": [],
+            "calendar_api_id": "luma-mine", "going": True, "guest_status": "registered", "source": "luma",
+        }
     return out
 
 
@@ -281,12 +430,25 @@ def normalize_event(entry, cal_id, going=False):
     }
 
 
-def fetch_all(session_key):
-    """Pull followed calendars plus every future event on each, plus the user's own registrations."""
-    raw_cals, _ = luma("/home/get-following-calendars", session_key=session_key)
-    items = raw_cals.get("entries") or raw_cals.get("calendars") or raw_cals.get("subscriptions") or []
-    calendars = [c for c in (normalize_calendar(i) for i in items if isinstance(i, dict)) if c]
-    log(f"following {len(calendars)} calendars")
+def fetch_all(session_key, errors_out=None):
+    """Pull followed calendars (session) plus link-added ones, every future event on each, plus registrations."""
+    calendars = []
+    if session_key:
+        try:
+            raw_cals, _ = luma("/home/get-following-calendars", session_key=session_key)
+            found = []
+            find_cal_objects(raw_cals, found)
+            calendars = [c for c in (normalize_calendar(i) for i in found) if c]
+            log(f"following {len(calendars)} calendars")
+        except LumaError as e:
+            if e.status == 401:
+                raise
+            (errors_out if errors_out is not None else []).append(f"Luma followed list: {e.body}")
+    known = {c["api_id"] for c in calendars}
+    for c in load_json(LUMA_CALS_FILE, []):
+        if c["api_id"] not in known:
+            calendars.append(dict(c))
+            known.add(c["api_id"])
 
     events = {}
     errors = []
@@ -304,11 +466,27 @@ def fetch_all(session_key):
         time.sleep(0.15)
 
     # Events the user registered for, whether or not they come from a followed calendar.
-    try:
-        mine = luma_paginated("/home/get-events", {"period": "future"}, session_key)
-    except LumaError as e:
-        mine = []
-        errors.append(f"my events: {e}")
+    mine = []
+    if session_key:
+        try:
+            mine = luma_paginated("/home/get-events", {"period": "future"}, session_key)
+        except LumaError as e:
+            errors.append(f"my events: {e}")
+    ics_cfg = load_json(LUMA_ICS_FILE)
+    if ics_cfg:
+        try:
+            mine_ics = fetch_luma_ics(ics_cfg["url"])
+            for evid, ev in mine_ics.items():
+                if evid in events:
+                    events[evid]["going"] = True
+                    events[evid]["guest_status"] = events[evid].get("guest_status") or "registered"
+                else:
+                    events[evid] = ev
+            if mine_ics and all(c["api_id"] != "luma-mine" for c in calendars):
+                calendars.append({"api_id": "luma-mine", "name": "My Luma events", "slug": None, "avatar_url": None,
+                                  "tint_color": "#f0c040", "url": "https://luma.com/home"})
+        except Exception as e:
+            errors.append(f"Luma iCal feed: {e}")
     for en in mine:
         ev = normalize_event(en, None, going=True)
         if not ev:
@@ -338,7 +516,7 @@ def load_cache():
 
 def refresh(force=False):
     sess, pf = load_session(), load_partiful()
-    if not sess and not pf:
+    if not sess and not pf and not load_json(LUMA_CALS_FILE) and not load_json(LUMA_ICS_FILE):
         return
     with lock:
         if state["refreshing"]:
@@ -347,9 +525,9 @@ def refresh(force=False):
     try:
         old = load_cache() or {}
         data = {"fetched_at": datetime.now(timezone.utc).isoformat(), "calendars": [], "events": [], "errors": []}
-        if sess:
+        if sess or load_json(LUMA_CALS_FILE) or load_json(LUMA_ICS_FILE):
             try:
-                luma_data = fetch_all(sess["session_key"])
+                luma_data = fetch_all((sess or {}).get("session_key"), data["errors"])
                 for ev in luma_data["events"]:
                     ev["source"] = "luma"
                 for c in luma_data["calendars"]:
@@ -456,7 +634,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/state":
             sess, pf = load_session(), load_partiful()
             data = load_cache() or {}
-            return self.send_json({"signed_in": bool(sess) or bool(pf), "luma_signed_in": bool(sess),
+            manual = load_json(LUMA_CALS_FILE, [])
+            ics_cfg = load_json(LUMA_ICS_FILE)
+            configured = bool(sess) or bool(pf) or bool(manual) or bool(ics_cfg)
+            return self.send_json({"signed_in": configured, "luma_signed_in": bool(sess), "luma_manual": manual,
+                                   "luma_ics_url": (ics_cfg or {}).get("url"),
                                    "email": (sess or {}).get("email"), "partiful_url": (pf or {}).get("url"),
                                    "refreshing": state["refreshing"], "last_error": state["last_error"],
                                    "fetched_at": data.get("fetched_at"), "calendars": data.get("calendars", []),
@@ -531,6 +713,37 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/auth/signout":
                 clear_session()
                 return self.send_json({"ok": True})
+            if path == "/api/luma/calendars":
+                added, failed = add_luma_calendars_from_text(body.get("text") or "")
+                if added:
+                    threading.Thread(target=refresh, daemon=True).start()
+                return self.send_json({"added": added, "failed": failed})
+            if path == "/api/luma/calendars/remove":
+                stored = [c for c in load_json(LUMA_CALS_FILE, []) if c["api_id"] != body.get("api_id")]
+                save_json(LUMA_CALS_FILE, stored)
+                threading.Thread(target=refresh, daemon=True).start()
+                return self.send_json({"ok": True})
+            if path == "/api/luma/import":
+                added, total = import_luma_calendars(body.get("payload"))
+                if added:
+                    threading.Thread(target=refresh, daemon=True).start()
+                return self.send_json({"added": added, "total": total})
+            if path == "/api/luma/ics":
+                url = (body.get("url") or "").strip()
+                if not url:
+                    try:
+                        os.remove(LUMA_ICS_FILE)
+                    except OSError:
+                        pass
+                    return self.send_json({"ok": True})
+                try:
+                    url = normalize_luma_ics_url(url)
+                    n = len(fetch_luma_ics(url))
+                except Exception as e:
+                    return self.send_json({"error": f"could not read that feed: {e}"}, 400)
+                save_json(LUMA_ICS_FILE, {"url": url})
+                threading.Thread(target=refresh, daemon=True).start()
+                return self.send_json({"ok": True, "events": n})
             if path == "/api/partiful":
                 url = (body.get("url") or "").strip()
                 if not url:
@@ -546,7 +759,7 @@ class Handler(BaseHTTPRequestHandler):
                 threading.Thread(target=refresh, daemon=True).start()
                 return self.send_json({"ok": True, "events": n})
             if path == "/api/refresh":
-                if not load_session() and not load_partiful():
+                if not (load_session() or load_partiful() or load_json(LUMA_CALS_FILE) or load_json(LUMA_ICS_FILE)):
                     return self.send_json({"error": "not signed in"}, 401)
                 threading.Thread(target=refresh, daemon=True).start()
                 return self.send_json({"ok": True})

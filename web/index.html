@@ -26,41 +26,59 @@
 <main>
   <section id="signin" hidden>
     <button id="back-btn" class="quiet" hidden>← back to calendar</button>
-    <h2>Luma</h2>
-    <p id="luma-status" class="msg"></p>
-    <p>Luma's public API cannot see calendars you follow, so this app reuses your luma.com browser session. The key stays on this server.</p>
-    <ol class="steps">
-      <li>Sign in at <a href="https://luma.com/signin" target="_blank" rel="noopener">luma.com</a> in this browser.</li>
-      <li>Open DevTools (F12 or Cmd-Opt-I) → <b>Application</b> (Chrome) or <b>Storage</b> (Firefox/Safari) → Cookies → luma.com.</li>
-      <li>Copy the value of <code>luma.auth-session-key</code> and paste it below.</li>
-    </ol>
-    <form id="session-form">
-      <input type="text" id="session-key" placeholder="paste luma.auth-session-key value" autocomplete="off">
-      <button type="submit">Use session</button>
+
+    <h2>Luma calendars</h2>
+    <p>Paste links to the Luma calendars you follow. In the Luma app open a calendar, tap <b>Share</b>, then <b>Copy link</b>. You can paste several at once, or a whole message with links in it.</p>
+    <form id="luma-links-form">
+      <textarea id="luma-links" rows="3" placeholder="https://luma.com/…  (one or many)"></textarea>
+      <button type="submit">Add</button>
     </form>
-    <details class="alt"><summary>Email code instead (usually blocked by Luma's bot check)</summary>
-    <form id="email-form">
-      <input type="email" id="email" placeholder="you@example.com" required autocomplete="email">
-      <button type="submit">Send code</button>
-    </form>
-    <form id="code-form" hidden>
-      <p>Enter the code Luma emailed you.</p>
-      <input type="text" id="code" inputmode="numeric" placeholder="123456" required autocomplete="one-time-code">
-      <button type="submit">Sign in</button>
-    </form>
-    <form id="tfa-form" hidden>
-      <p>Two-factor code from your authenticator app.</p>
-      <input type="text" id="tfa" inputmode="numeric" placeholder="123456" required>
-      <button type="submit">Verify</button>
-    </form>
+    <p id="luma-links-msg" class="msg"></p>
+    <ul id="luma-manual" class="cal-chips"></ul>
+
+    <details class="alt"><summary>Import everything I follow in one go</summary>
+      <p>Luma only shows the list of calendars you follow when you are logged in, so this needs your browser.</p>
+      <p><b>Bookmarklet.</b> Save this link as a bookmark, then open it while on luma.com. It reads your followed list and sends you back here with it. On iPhone: bookmark any page, then edit the bookmark and replace its address with the copied text.</p>
+      <div class="row-wrap">
+        <a id="bookmarklet" href="#">Import Luma follows</a>
+        <button type="button" id="copy-bookmarklet">Copy bookmarklet</button>
+      </div>
+      <p><b>Or, on a computer,</b> sign in at luma.com, open DevTools → Application/Storage → Cookies → luma.com, copy <code>luma.auth-session-key</code>, and paste it here. This also keeps the list in sync as you follow new calendars.</p>
+      <p id="luma-status" class="msg"></p>
+      <form id="session-form">
+        <input type="text" id="session-key" placeholder="luma.auth-session-key value" autocomplete="off">
+        <button type="submit">Use session</button>
+      </form>
+      <button id="signout" class="quiet" hidden>forget session</button>
+      <form id="email-form" hidden>
+        <input type="email" id="email" placeholder="you@example.com" autocomplete="email">
+        <button type="submit">Send code</button>
+      </form>
+      <form id="code-form" hidden>
+        <input type="text" id="code" inputmode="numeric" placeholder="123456" autocomplete="one-time-code">
+        <button type="submit">Sign in</button>
+      </form>
+      <form id="tfa-form" hidden>
+        <input type="text" id="tfa" inputmode="numeric" placeholder="123456">
+        <button type="submit">Verify</button>
+      </form>
+      <p id="signin-msg" class="msg"></p>
     </details>
-    <p id="signin-msg" class="msg"></p>
-    <button id="signout" class="quiet" hidden>sign out of Luma</button>
+
+    <details class="alt"><summary>Mark the Luma events I'm going to</summary>
+      <p>Optional. In Luma go to <b>Settings → Calendar Syncing → Add iCal Subscription</b>, pick <b>Google Calendar</b>, and copy the link it opens (it contains your personal feed). Paste it here and those events show with a ✓.</p>
+      <form id="luma-ics-form">
+        <input type="text" id="luma-ics-url" placeholder="https://api.lu.ma/ics/get?entity=user&id=… or the Google link">
+        <button type="submit">Save</button>
+        <button type="button" id="luma-ics-clear" class="quiet">remove</button>
+      </form>
+      <p id="luma-ics-msg" class="msg"></p>
+    </details>
 
     <h2>Partiful</h2>
-    <p>Partiful has no API, but it gives every account a personal calendar feed. On any Partiful event page click the calendar icon, choose <b>Google Calendar</b>, then <b>Copy Link</b>. Paste that link here. It covers the events you are invited to, going to, or hosting, per your Partiful calendar-sync preferences.</p>
+    <p>Partiful gives every account a personal calendar feed. On any Partiful event tap the calendar icon, choose <b>Google Calendar</b>, then <b>Copy Link</b>, and paste it here. It covers events you are invited to, going to, or hosting.</p>
     <form id="partiful-form">
-      <input type="url" id="partiful-url" placeholder="webcal://calendars.partiful.com/getCalendar?id=…">
+      <input type="text" id="partiful-url" placeholder="webcal://calendars.partiful.com/getCalendar?id=…">
       <button type="submit">Save</button>
       <button type="button" id="partiful-clear" class="quiet">remove</button>
     </form>

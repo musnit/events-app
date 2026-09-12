@@ -15,6 +15,17 @@ API at all, but each account gets a personal iCalendar feed, which we poll.
   merged view can be subscribed to from Google/Apple Calendar.
 - `.session.json` (gitignored, 0600) — Luma session key + email. `.partiful.json` — feed URL.
 
+## How Luma sources are configured (phone-friendly first)
+
+1. **Calendar links** (default): musnit pastes luma.com calendar links; `resolve_luma_link` loads the
+   page's `__NEXT_DATA__` and finds the calendar object. Stored in `.luma_calendars.json`.
+2. **Bookmarklet**: run on luma.com, it fetches `/home/get-following-calendars` with the browser's
+   cookies and redirects to `/luma/#import=<base64 json>`; the frontend posts it to `/api/luma/import`.
+3. **Session cookie** (desktop only): paste `luma.auth-session-key`; then the followed list and
+   registered events sync automatically. The email-code flow is blocked by Luma's Turnstile check.
+4. **Personal iCal feed** (optional): Settings → Calendar Syncing link; marks registered events ✓.
+   Accepts the raw ics/get URL, webcal://, or the Google add-by-URL link (`cid=`).
+
 ## Luma internals used (api.luma.com, undocumented, may change)
 
 - Email-code sign-in is blocked by a Cloudflare Turnstile check (`auth/additional-verification-required`), so the normal path is pasting the `luma.auth-session-key` cookie from a logged-in browser (`POST /api/auth/session`). Kept for reference: `POST /auth/email/send-sign-in-code {email}` then `POST /auth/email/sign-in-with-code
