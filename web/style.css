@@ -46,3 +46,7 @@ main { padding:16px; }
 #popover h3 { margin:0 0 6px; font-size:15px; }
 #popover .meta { color:var(--muted); font-size:12px; margin-bottom:8px; }
 #popover a { color:var(--accent); }
+.steps { padding-left:20px; color:var(--muted); }
+.steps code { color:var(--fg); background:var(--bg); padding:1px 4px; border-radius:4px; }
+.alt { margin-top:10px; color:var(--muted); }
+.alt summary { cursor:pointer; }

@@ -17,7 +17,7 @@ API at all, but each account gets a personal iCalendar feed, which we poll.
 
 ## Luma internals used (api.luma.com, undocumented, may change)
 
-- `POST /auth/email/send-sign-in-code {email}` then `POST /auth/email/sign-in-with-code
+- Email-code sign-in is blocked by a Cloudflare Turnstile check (`auth/additional-verification-required`), so the normal path is pasting the `luma.auth-session-key` cookie from a logged-in browser (`POST /api/auth/session`). Kept for reference: `POST /auth/email/send-sign-in-code {email}` then `POST /auth/email/sign-in-with-code
   {email, code}` → `Set-Cookie: luma.auth-session-key=…`. If the response has
   `step: "two_factor"`, `POST /auth/sign-in-with-two-factor`.
 - `GET /home/get-following-calendars` (cookie) → calendars he follows. Response shape was

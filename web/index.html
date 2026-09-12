@@ -28,7 +28,17 @@
     <button id="back-btn" class="quiet" hidden>← back to calendar</button>
     <h2>Luma</h2>
     <p id="luma-status" class="msg"></p>
-    <p>Luma's public API cannot see calendars you follow, so this app signs in with your Luma email code, exactly like luma.com does. The session key stays on this server.</p>
+    <p>Luma's public API cannot see calendars you follow, so this app reuses your luma.com browser session. The key stays on this server.</p>
+    <ol class="steps">
+      <li>Sign in at <a href="https://luma.com/signin" target="_blank" rel="noopener">luma.com</a> in this browser.</li>
+      <li>Open DevTools (F12 or Cmd-Opt-I) → <b>Application</b> (Chrome) or <b>Storage</b> (Firefox/Safari) → Cookies → luma.com.</li>
+      <li>Copy the value of <code>luma.auth-session-key</code> and paste it below.</li>
+    </ol>
+    <form id="session-form">
+      <input type="text" id="session-key" placeholder="paste luma.auth-session-key value" autocomplete="off">
+      <button type="submit">Use session</button>
+    </form>
+    <details class="alt"><summary>Email code instead (usually blocked by Luma's bot check)</summary>
     <form id="email-form">
       <input type="email" id="email" placeholder="you@example.com" required autocomplete="email">
       <button type="submit">Send code</button>
@@ -43,6 +53,7 @@
       <input type="text" id="tfa" inputmode="numeric" placeholder="123456" required>
       <button type="submit">Verify</button>
     </form>
+    </details>
     <p id="signin-msg" class="msg"></p>
     <button id="signout" class="quiet" hidden>sign out of Luma</button>
 

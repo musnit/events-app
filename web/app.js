@@ -37,6 +37,12 @@ $('#tfa-form').onsubmit = async (e) => {
   try { await api('api/auth/two-factor', { email: state.email, code: $('#tfa').value.trim(), ...state.tfa }); $('#signin-msg').textContent = 'Signed in. Loading…'; state.showSources = false; pollUntilData(); }
   catch (err) { $('#signin-msg').textContent = err.message; }
 };
+$('#session-form').onsubmit = async (e) => {
+  e.preventDefault();
+  $('#signin-msg').textContent = 'Checking the session with Luma…';
+  try { await api('api/auth/session', { session_key: $('#session-key').value.trim() }); $('#session-key').value = ''; $('#signin-msg').textContent = 'Signed in. Loading your calendars…'; state.showSources = false; pollUntilData(); }
+  catch (err) { $('#signin-msg').textContent = err.message; }
+};
 $('#signout').onclick = async () => { await api('api/auth/signout', {}); load(); };
 $('#sources-btn').onclick = () => { state.showSources = true; render(state.data); };
 $('#back-btn').onclick = () => { state.showSources = false; render(state.data); };
@@ -70,7 +76,7 @@ function render(s) {
   $('#nav').hidden = !s.signed_in;
   $('#back-btn').hidden = !s.signed_in;
   $('#luma-status').textContent = s.luma_signed_in ? `Signed in as ${s.email}.` : 'Not signed in.';
-  $('#email-form').hidden = s.luma_signed_in; $('#signout').hidden = !s.luma_signed_in;
+  $('#email-form').hidden = s.luma_signed_in; $('#session-form').hidden = s.luma_signed_in; $('#signout').hidden = !s.luma_signed_in;
   if (!s.luma_signed_in) { $('#code-form').hidden = true; $('#tfa-form').hidden = true; }
   if (s.partiful_url && !$('#partiful-url').value) $('#partiful-url').value = s.partiful_url;
   if (!showApp) return;

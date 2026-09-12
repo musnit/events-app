@@ -516,6 +516,18 @@ class Handler(BaseHTTPRequestHandler):
                 save_session({"session_key": key, "email": body.get("email"), "saved_at": datetime.now(timezone.utc).isoformat()})
                 threading.Thread(target=refresh, daemon=True).start()
                 return self.send_json({"ok": True})
+            if path == "/api/auth/session":
+                key = (body.get("session_key") or "").strip()
+                key = key.split("=", 1)[1] if key.startswith(COOKIE_NAME + "=") else key
+                if not key:
+                    return self.send_json({"error": "session key required"}, 400)
+                try:
+                    luma("/home/get-events", {"period": "future", "pagination_limit": 1}, session_key=key)
+                except LumaError as e:
+                    return self.send_json({"error": f"Luma rejected that key: {e.body}"}, 400)
+                save_session({"session_key": key, "email": body.get("email") or "cookie", "saved_at": datetime.now(timezone.utc).isoformat()})
+                threading.Thread(target=refresh, daemon=True).start()
+                return self.send_json({"ok": True})
             if path == "/api/auth/signout":
                 clear_session()
                 return self.send_json({"ok": True})
@@ -539,7 +551,10 @@ class Handler(BaseHTTPRequestHandler):
                 threading.Thread(target=refresh, daemon=True).start()
                 return self.send_json({"ok": True})
         except LumaError as e:
-            return self.send_json({"error": e.body, "status": e.status}, 502)
+            msg = e.body
+            if "additional verification" in str(msg):
+                msg = "Luma wants a browser bot-check for this step. Use the session-cookie option instead."
+            return self.send_json({"error": msg, "status": e.status}, 502)
         return self.send_json({"error": "not found"}, 404)
 
 
