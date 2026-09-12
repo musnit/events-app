@@ -1,6 +1,6 @@
 // Luma followed-calendars view. Talks to the local server with relative URLs so it works under /luma/.
 const $ = (s) => document.querySelector(s);
-const state = { data: null, month: startOfMonth(new Date()), hidden: new Set(), goingOnly: false, view: 'grid', email: '' };
+const state = { data: null, month: startOfMonth(new Date()), day: new Date(), hidden: new Set(), goingOnly: false, view: 'grid', email: '' };
 const PALETTE = ['#7c9cff','#ff8a65','#4dd0a1','#ffca4d','#c884ff','#4fc3f7','#f06292','#a5d66f','#ffab40','#80cbc4','#b39ddb','#e57373'];
 
 function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
@@ -98,7 +98,7 @@ function renderSidebar() {
   const counts = {};
   state.data.events.forEach(e => { counts[e.calendar_api_id] = (counts[e.calendar_api_id] || 0) + 1; });
   const ul = $('#cal-list'); ul.innerHTML = '';
-  [...state.data.calendars].sort((a, b) => (counts[b.api_id] || 0) - (counts[a.api_id] || 0)).forEach(c => {
+  [...state.data.calendars].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })).forEach(c => {
     const li = document.createElement('li');
     li.className = state.hidden.has(c.api_id) ? 'off' : '';
     li.innerHTML = `<span class="swatch" style="background:${c.color}"></span>` + (c.avatar_url ? `<img src="${c.avatar_url}" alt="">` : '') + `<span class="name" title="${c.name}">${c.name}${c.not_followed ? ' *' : ''}</span><span class="count">${counts[c.api_id] || 0}</span>`;
@@ -109,16 +109,42 @@ function renderSidebar() {
 $('#all-cals').onclick = () => { state.hidden.clear(); renderSidebar(); renderMain(); };
 $('#no-cals').onclick = () => { state.data.calendars.forEach(c => state.hidden.add(c.api_id)); renderSidebar(); renderMain(); };
 $('#going-only').onchange = (e) => { state.goingOnly = e.target.checked; renderMain(); };
-$('#view-toggle').onclick = () => { state.view = state.view === 'grid' ? 'list' : 'grid'; $('#view-toggle').textContent = state.view === 'grid' ? 'List' : 'Month'; renderMain(); };
-$('#prev').onclick = () => { state.month = new Date(state.month.getFullYear(), state.month.getMonth() - 1, 1); renderMain(); };
-$('#next').onclick = () => { state.month = new Date(state.month.getFullYear(), state.month.getMonth() + 1, 1); renderMain(); };
-$('#today').onclick = () => { state.month = startOfMonth(new Date()); renderMain(); };
+function setView(v) { state.view = v; ['day','grid','list'].forEach(x => $('#view-' + x).classList.toggle('on', x === v)); renderMain(); }
+$('#view-grid').onclick = () => { state.month = startOfMonth(new Date()); setView('grid'); };
+$('#view-list').onclick = () => { state.month = startOfMonth(new Date()); setView('list'); };
+$('#view-day').onclick = () => { state.day = new Date(); setView('day'); };
+function step(n) {
+  if (state.view === 'day') { const d = new Date(state.day); d.setDate(d.getDate() + n); state.day = d; }
+  else state.month = new Date(state.month.getFullYear(), state.month.getMonth() + n, 1);
+  renderMain();
+}
+$('#prev').onclick = () => step(-1);
+$('#next').onclick = () => step(1);
 
 function renderMain() {
-  $('#month-label').textContent = state.month.toLocaleDateString([], { month: 'long', year: 'numeric' });
+  const isDay = state.view === 'day';
+  const todayK = dayKey(new Date());
+  $('#month-label').textContent = isDay
+    ? (dayKey(state.day) === todayK ? 'Today, ' : '') + fmtDay(state.day)
+    : state.month.toLocaleDateString([], { month: 'long', year: 'numeric' });
   $('#grid').hidden = state.view !== 'grid';
-  $('#list').hidden = state.view !== 'list';
-  state.view === 'grid' ? renderGrid() : renderList();
+  $('#list').hidden = state.view === 'grid';
+  if (state.view === 'grid') renderGrid(); else if (isDay) renderDay(); else renderList();
+}
+
+function renderDay() {
+  const l = $('#list'); l.innerHTML = '';
+  const evs = (groupByDay(visibleEvents())[dayKey(state.day)] || []).sort((a, b) => a.start_at.localeCompare(b.start_at));
+  if (!evs.length) { l.innerHTML = '<p class="empty">Nothing on this day from the calendars you have turned on.</p>'; return; }
+  evs.forEach(e => l.appendChild(listRow(e)));
+}
+
+function listRow(e) {
+  const c = calOf(e);
+  const row = document.createElement('div'); row.className = 'row'; row.style.setProperty('--c', c.color || '');
+  row.innerHTML = `<div>${e.all_day ? 'all day' : fmtTime(e.start_at)}</div><div><div>${e.going ? '✓ ' : ''}${escapeHtml(e.name || '')}</div><div class="meta">${escapeHtml(c.name || '')}${e.city ? ' · ' + escapeHtml(e.city) : (e.location_type === 'online' ? ' · online' : '')}${e.hosts.length ? ' · ' + escapeHtml(e.hosts.join(', ')) : ''}</div></div>`;
+  row.onclick = (ev) => showPopover(e, ev);
+  return row;
 }
 
 function groupByDay(evs) {
@@ -155,7 +181,7 @@ function renderGrid() {
     const evs = by[k] || [];
     const MAX = 5;
     evs.slice(0, MAX).forEach(e => cell.appendChild(evNode(e)));
-    if (evs.length > MAX) { const m = document.createElement('div'); m.className = 'more'; m.textContent = `+${evs.length - MAX} more`; m.onclick = () => { state.view = 'list'; $('#view-toggle').textContent = 'Month'; renderMain(); document.getElementById('d-' + k)?.scrollIntoView(); }; cell.appendChild(m); }
+    if (evs.length > MAX) { const m = document.createElement('div'); m.className = 'more'; m.textContent = `+${evs.length - MAX} more`; m.onclick = () => { state.day = new Date(k + 'T12:00:00'); setView('day'); }; cell.appendChild(m); }
     g.appendChild(cell);
   }
 }
@@ -167,13 +193,7 @@ function renderList() {
   if (!keys.length) l.innerHTML = '<p class="msg">No events this month.</p>';
   keys.forEach(k => {
     const h = document.createElement('div'); h.className = 'dayhead'; h.id = 'd-' + k; h.textContent = fmtDay(new Date(k + 'T12:00:00')); l.appendChild(h);
-    by[k].sort((a, b) => a.start_at.localeCompare(b.start_at)).forEach(e => {
-      const c = calOf(e);
-      const row = document.createElement('div'); row.className = 'row'; row.style.setProperty('--c', c.color || '');
-      row.innerHTML = `<div>${e.all_day ? 'all day' : fmtTime(e.start_at)}</div><div><div>${e.going ? '✓ ' : ''}${escapeHtml(e.name || '')}</div><div class="meta">${escapeHtml(c.name || '')}${e.city ? ' · ' + escapeHtml(e.city) : (e.location_type === 'online' ? ' · online' : '')}${e.hosts.length ? ' · ' + escapeHtml(e.hosts.join(', ')) : ''}</div></div>`;
-      row.onclick = (ev) => showPopover(e, ev);
-      l.appendChild(row);
-    });
+    by[k].sort((a, b) => a.start_at.localeCompare(b.start_at)).forEach(e => l.appendChild(listRow(e)));
   });
 }
 

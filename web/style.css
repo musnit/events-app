@@ -64,3 +64,9 @@ main { padding:16px; }
 .platform-tabs button.on { border-color:var(--accent); color:var(--accent); }
 .steps li { margin-bottom:6px; }
 #bm-text { width:100%; font-size:11px; }
+.seg { display:flex; }
+.seg button { border-radius:0; margin-left:-1px; }
+.seg button:first-child { border-radius:6px 0 0 6px; margin-left:0; }
+.seg button:last-child { border-radius:0 6px 6px 0; }
+.seg button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+#list .empty { color:var(--muted); padding:20px 0; }

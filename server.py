@@ -368,7 +368,7 @@ def fetch_partiful(url):
         desc = ics_unescape(ve.get("DESCRIPTION", ""))
         url_ = ve.get("URL") or next((w for w in desc.split() if "partiful.com/e/" in w), None)
         status = (ve.get("STATUS") or "").lower()
-        summary = ics_unescape(ve.get("SUMMARY", ""))
+        summary = re.sub(r"\s*\|\s*Partiful\s*$", "", ics_unescape(ve.get("SUMMARY", "")))
         out.append({
             "api_id": "pf-" + (ve.get("UID") or summary + start),
             "name": summary,
