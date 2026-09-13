@@ -628,7 +628,10 @@ def normalize_event(entry, cal_id, going=False):
     if guest.get("approval_status") in ("approved", "pending_approval", "waitlist"):
         going = True
     coord = ev.get("coordinate") or geo.get("place_coordinate") or {}
+    pc = entry.get("calendar") if isinstance(entry.get("calendar"), dict) else {}
+    presented_by = {"api_id": pc.get("api_id"), "name": pc.get("name"), "avatar_url": pc.get("avatar_url")} if pc.get("api_id") else None
     out = {
+        "presented_by": presented_by,
         "api_id": ev["api_id"],
         "name": ev.get("name"),
         "url": "https://luma.com/" + (ev.get("url") or ev["api_id"]),

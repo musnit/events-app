@@ -163,10 +163,12 @@ function dayCard(e) {
   const end = e.end_at ? ' – ' + fmtTime(e.end_at) : '';
   const where = e.city ? escapeHtml(e.city) : (e.area === 'online' || e.location_type === 'online' ? 'online' : '');
   // The calendar is the group or community, so it leads; individual hosts follow, org-looking ones first.
-  const calName = (c.name || '').trim().toLowerCase();
+  // Luma's "presented by" is the event's own calendar, which can differ from the followed calendar that listed it.
+  const pb = e.presented_by && e.presented_by.name ? e.presented_by : c;
+  const calName = (pb.name || '').trim().toLowerCase();
   const people = e.hosts.map((n, i) => ({ n, a: (e.host_avatars || [])[i] })).filter(h => h.n.trim().toLowerCase() !== calName);
-  const avs = [c.avatar_url, ...people.slice(0, 2).map(h => h.a)].filter(Boolean).map(u => `<img class="av" src="${u}" alt="" loading="lazy">`).join('');
-  const names = [c.name, ...people.slice(0, 2).map(h => h.n)].filter(Boolean).join(' · ') + (people.length > 2 ? ` +${people.length - 2}` : '');
+  const avs = [pb.avatar_url, ...people.slice(0, 2).map(h => h.a)].filter(Boolean).map(u => `<img class="av" src="${u}" alt="" loading="lazy">`).join('');
+  const names = [pb.name, ...people.slice(0, 2).map(h => h.n)].filter(Boolean).join(' · ') + (people.length > 2 ? ` +${people.length - 2}` : '');
   const hostLine = `<div class="hosts">${avs}<span>${escapeHtml(names)}</span></div>`;
   card.innerHTML = (e.cover_url ? `<img src="${e.cover_url}" alt="" loading="lazy">` : '<div class="noimg"></div>') +
     `<div class="body">${hostLine}<div class="when">${e.all_day ? 'All day' : fmtTime(e.start_at) + end}</div>` +
@@ -239,7 +241,7 @@ function showPopover(e, ev) {
   const c = calOf(e);
   const p = $('#popover');
   const end = e.end_at ? ' – ' + fmtTime(e.end_at) : '';
-  p.innerHTML = (e.cover_url ? `<img src="${e.cover_url}" alt="">` : '') + `<h3>${escapeHtml(e.name || '')}</h3><div class="meta">${fmtDay(new Date(e.start_at))} · ${fmtTime(e.start_at)}${end}<br>${escapeHtml(c.name || '')}${e.city ? ' · ' + escapeHtml(e.city) : (e.location_type === 'online' ? ' · online' : '')}${e.hosts.length ? '<br>' + hostAvatars(e) + 'Hosted by ' + escapeHtml(e.hosts.join(', ')) : ''}${e.going ? '<br>You are ' + escapeHtml(e.guest_status || 'registered') : ''}</div><a href="${e.url}" target="_blank" rel="noopener">Open on Luma ↗</a>`;
+  p.innerHTML = (e.cover_url ? `<img src="${e.cover_url}" alt="">` : '') + `<h3>${escapeHtml(e.name || '')}</h3><div class="meta">${fmtDay(new Date(e.start_at))} · ${fmtTime(e.start_at)}${end}<br>${escapeHtml((e.presented_by && e.presented_by.name) || c.name || '')}${e.city ? ' · ' + escapeHtml(e.city) : (e.location_type === 'online' ? ' · online' : '')}${e.hosts.length ? '<br>' + hostAvatars(e) + 'Hosted by ' + escapeHtml(e.hosts.join(', ')) : ''}${e.going ? '<br>You are ' + escapeHtml(e.guest_status || 'registered') : ''}</div><a href="${e.url}" target="_blank" rel="noopener">Open on Luma ↗</a>`;
   p.hidden = false;
   // Measure the real popover, then open it below the tap if it fits, otherwise above it.
   const w = p.offsetWidth, h = p.offsetHeight;
