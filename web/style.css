@@ -70,3 +70,4 @@ main { padding:16px; }
 .seg button:last-child { border-radius:0 6px 6px 0; }
 .seg button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
 #list .empty { color:var(--muted); padding:20px 0; }
+[hidden] { display:none !important; }
