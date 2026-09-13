@@ -162,11 +162,13 @@ function dayCard(e) {
   const card = document.createElement('div'); card.className = 'card'; card.style.setProperty('--c', c.color || '');
   const end = e.end_at ? ' – ' + fmtTime(e.end_at) : '';
   const where = e.city ? escapeHtml(e.city) : (e.area === 'online' || e.location_type === 'online' ? 'online' : '');
+  const hostLine = e.hosts.length
+    ? `<div class="hosts">${hostAvatars(e)}<span>${escapeHtml(e.hosts.slice(0, 3).join(', '))}${e.hosts.length > 3 ? ` +${e.hosts.length - 3}` : ''}</span></div>`
+    : `<div class="hosts">${c.avatar_url ? `<img class="av" src="${c.avatar_url}" alt="">` : ''}<span>${escapeHtml(c.name || '')}</span></div>`;
   card.innerHTML = (e.cover_url ? `<img src="${e.cover_url}" alt="" loading="lazy">` : '<div class="noimg"></div>') +
-    `<div class="body"><div class="when">${e.all_day ? 'All day' : fmtTime(e.start_at) + end}</div>` +
+    `<div class="body">${hostLine}<div class="when">${e.all_day ? 'All day' : fmtTime(e.start_at) + end}</div>` +
     `<div class="title">${e.going ? '✓ ' : ''}${escapeHtml(e.name || '')}</div>` +
-    `<div class="meta">${c.avatar_url ? `<img class="av" src="${c.avatar_url}" alt="">` : ''}${escapeHtml(c.name || '')}${where ? ' · ' + where : ''}</div>` +
-    (e.hosts.length ? `<div class="meta hosts">${hostAvatars(e)}${escapeHtml(e.hosts.slice(0, 3).join(', '))}${e.hosts.length > 3 ? ` +${e.hosts.length - 3}` : ''}</div>` : '') + `</div>`;
+    `<div class="meta">${escapeHtml(c.name || '')}${where ? ' · ' + where : ''}</div></div>`;
   card.onclick = (ev) => showPopover(e, ev);
   return card;
 }
