@@ -81,6 +81,8 @@ function render(s) {
   if (s.partiful_url && !$('#partiful-url').value) $('#partiful-url').value = s.partiful_url;
   if (s.luma_ics_url && !$('#luma-ics-url').value) $('#luma-ics-url').value = s.luma_ics_url;
   renderManual(s.luma_manual || []);
+  $('#pf-status').textContent = s.partiful_connected ? 'Partiful is connected; following and your own events sync automatically.' : '';
+  $('#pf-disconnect').hidden = !s.partiful_connected;
   if (!showApp) return;
   s.calendars.forEach((c, i) => { c.color = c.tint_color && c.tint_color !== '#1e1e1e' ? c.tint_color : PALETTE[i % PALETTE.length]; });
   renderSidebar();
@@ -213,6 +215,16 @@ document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') $('#popo
 const APP_URL = location.origin + location.pathname.replace(/[^/]*$/, '');
 const BOOKMARKLET = `javascript:(async()=>{try{if(!/(^|\\.)(luma\\.com|lu\\.ma)$/.test(location.hostname)){alert('Open luma.com first (signed in), then tap this bookmark.');return;}const g=async(p)=>{const r=await fetch('https://api.luma.com'+p,{credentials:'include'});if(!r.ok)throw new Error('Luma said '+r.status+' (signed in?)');return r.json();};const cals=[];let cur=null;for(let i=0;i<20;i++){const d=await g('/home/get-following-calendars?pagination_limit=100'+(cur?'&pagination_cursor='+encodeURIComponent(cur):''));const walk=(o)=>{if(Array.isArray(o))o.forEach(walk);else if(o&&typeof o==='object'){if(typeof o.api_id==='string'&&o.api_id.startsWith('cal-')&&'name'in o)cals.push({api_id:o.api_id,name:o.name,slug:o.slug||null,avatar_url:o.avatar_url||null,tint_color:o.tint_color||null,is_personal:!!o.is_personal,personal_user:o.personal_user?{name:o.personal_user.name}:null});else Object.values(o).forEach(walk);}};walk(d);if(!d.has_more||!d.next_cursor)break;cur=d.next_cursor;}const going=[];try{const e=await g('/home/get-events?period=future&pagination_limit=100');(e.entries||[]).forEach(x=>x.event&&going.push(x.event.api_id));}catch(_){}const m=document.cookie.match(/(?:^|;\\s*)luma\\.auth-session-key=([^;]+)/);const payload={calendars:cals,going,session_key:m?decodeURIComponent(m[1]):null};if(!cals.length){alert('Found no followed calendars. Are you signed in to luma.com?');return;}location.href=${JSON.stringify(APP_URL)}+'#import='+encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(payload)))));}catch(e){alert('Import failed: '+e.message);}})()`;
 $('#bookmarklet').href = BOOKMARKLET;
+const PF_BOOKMARKLET = `javascript:(async()=>{try{if(!/(^|\\.)partiful\\.com$/.test(location.hostname)){alert('Open partiful.com first (signed in), then tap this bookmark.');return;}const db=await new Promise((res,rej)=>{const r=indexedDB.open('firebaseLocalStorageDb');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});const rows=await new Promise((res,rej)=>{const tx=db.transaction('firebaseLocalStorage','readonly');const q=tx.objectStore('firebaseLocalStorage').getAll();q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});const row=rows.find(r=>String(r.fbase_key||'').startsWith('firebase:authUser:'));if(!row||!row.value||!row.value.stsTokenManager){alert('You are not signed in to Partiful in this browser.');return;}const v=row.value;const payload={uid:v.uid,refresh_token:v.stsTokenManager.refreshToken};location.href=${JSON.stringify(APP_URL)}+'#pfimport='+encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(payload)))));}catch(e){alert('Import failed: '+e.message);}})()`;
+$('#pf-bookmarklet').href = PF_BOOKMARKLET;
+$('#pf-bm-text').value = PF_BOOKMARKLET;
+async function copyPfBookmarklet() {
+  try { await navigator.clipboard.writeText(PF_BOOKMARKLET); $('#copy-pf-bookmarklet').textContent = 'Copied ✓'; $('#pf-import-msg').textContent = 'Copied. Now follow the steps above.'; }
+  catch { $('#pf-bm-text').hidden = false; $('#pf-bm-text').select(); $('#pf-import-msg').textContent = 'Select all of the text above and copy it.'; }
+}
+$('#copy-pf-bookmarklet').onclick = copyPfBookmarklet;
+$('#pf-bookmarklet').onclick = (e) => { e.preventDefault(); copyPfBookmarklet(); };
+$('#pf-disconnect').onclick = async () => { await api('api/partiful/disconnect', {}); load(); };
 $('#bookmarklet').onclick = (e) => { e.preventDefault(); copyBookmarklet(); };
 async function copyBookmarklet() {
   try { await navigator.clipboard.writeText(BOOKMARKLET); $('#copy-bookmarklet').textContent = 'Copied ✓'; $('#import-msg').textContent = 'Copied. Now follow the steps below.'; }
@@ -256,6 +268,19 @@ function renderManual(list) {
 }
 
 async function handleImportHash() {
+  const pm = location.hash.match(/^#pfimport=(.+)$/);
+  if (pm) {
+    history.replaceState(null, '', location.pathname);
+    state.showSources = true;
+    try {
+      const payload = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(pm[1])))));
+      await api('api/partiful/import', { payload });
+      await load();
+      $('#pf-import-msg').textContent = 'Partiful connected. Pulling the events from people you follow…';
+      setTimeout(load, 6000);
+    } catch (err) { await load(); $('#pf-import-msg').textContent = 'Partiful import failed: ' + err.message; }
+    return true;
+  }
   const m = location.hash.match(/^#import=(.+)$/);
   if (!m) return false;
   history.replaceState(null, '', location.pathname);

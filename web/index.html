@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Events · Luma + Partiful</title>
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 <header>
@@ -95,13 +95,37 @@
     </details>
 
     <h2>Partiful</h2>
-    <p>Partiful gives every account a personal calendar feed. On any Partiful event tap the calendar icon, choose <b>Google Calendar</b>, then <b>Copy Link</b>, and paste it here. It covers events you are invited to, going to, or hosting.</p>
-    <form id="partiful-form">
-      <input type="text" id="partiful-url" placeholder="webcal://calendars.partiful.com/getCalendar?id=…">
-      <button type="submit">Save</button>
-      <button type="button" id="partiful-clear" class="quiet">remove</button>
-    </form>
-    <p id="partiful-msg" class="msg"></p>
+    <p>Same idea as Luma: a one-time bookmark tapped on partiful.com hands this app your Partiful login. It then reads the events from people and orgs you follow, plus your own upcoming events, and keeps them fresh on its own.</p>
+    <p id="pf-status" class="msg"></p>
+    <ol class="steps" data-platform="ios" hidden>
+      <li>Tap <b>Copy Partiful bookmarklet</b> below.</li>
+      <li>Safari <b>Share</b> → <b>Add Bookmark</b> → Save, then Bookmarks → Edit → tap it → replace the <b>Address</b> with the copied text.</li>
+      <li>Open <a href="https://partiful.com/events" target="_blank" rel="noopener">partiful.com/events</a> signed in, then open Bookmarks and tap it.</li>
+    </ol>
+    <ol class="steps" data-platform="android" hidden>
+      <li>Tap <b>Copy Partiful bookmarklet</b> below, bookmark this page in Chrome, then edit that bookmark's URL to the copied text and name it "Import Partiful".</li>
+      <li>Open <a href="https://partiful.com/events" target="_blank" rel="noopener">partiful.com/events</a> signed in, type <b>Import Partiful</b> in the address bar and pick the bookmark.</li>
+    </ol>
+    <ol class="steps" data-platform="desktop" hidden>
+      <li>Drag <b>Import Partiful</b> below to your bookmarks bar, open <a href="https://partiful.com/events" target="_blank" rel="noopener">partiful.com/events</a> signed in, and click it.</li>
+    </ol>
+    <div class="row-wrap">
+      <button type="button" id="copy-pf-bookmarklet">Copy Partiful bookmarklet</button>
+      <a id="pf-bookmarklet" href="#" data-platform="desktop" hidden>Import Partiful</a>
+      <button type="button" id="pf-disconnect" class="quiet" hidden>disconnect</button>
+    </div>
+    <textarea id="pf-bm-text" rows="3" readonly hidden></textarea>
+    <p id="pf-import-msg" class="msg"></p>
+
+    <details class="alt"><summary>Or just the calendar feed link</summary>
+      <p>Covers only events you are invited to or going to. On any Partiful event tap the calendar icon, choose <b>Google Calendar</b>, then <b>Copy Link</b>, and paste it here.</p>
+      <form id="partiful-form">
+        <input type="text" id="partiful-url" placeholder="webcal://calendars.partiful.com/getCalendar?id=…">
+        <button type="submit">Save</button>
+        <button type="button" id="partiful-clear" class="quiet">remove</button>
+      </form>
+      <p id="partiful-msg" class="msg"></p>
+    </details>
   </section>
 
   <section id="app" hidden>
@@ -116,6 +140,6 @@
 </main>
 
 <div id="popover" hidden></div>
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

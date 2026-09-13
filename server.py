@@ -27,6 +27,12 @@ PARTIFUL_FILE = os.path.join(ROOT, ".partiful.json")
 LUMA_CALS_FILE = os.path.join(ROOT, ".luma_calendars.json")
 LUMA_ICS_FILE = os.path.join(ROOT, ".luma_ics.json")
 LUMA_GOING_FILE = os.path.join(ROOT, ".luma_going.json")
+PARTIFUL_AUTH_FILE = os.path.join(ROOT, ".partiful_auth.json")
+PARTIFUL_DEBUG_FILE = os.path.join(ROOT, "partiful_debug.json")
+PARTIFUL_API = "https://api.partiful.com"
+PARTIFUL_FIREBASE_KEY = "AIzaSyCky6PJ7cHRdBKk5X7gjuWERWaKWBHr4_k"  # public web key from partiful.com's bundle
+PARTIFUL_FOLLOW_CAL = {"api_id": "partiful-following", "name": "Partiful · people I follow", "slug": None, "avatar_url": None,
+                       "tint_color": "#ff9f43", "url": "https://partiful.com/explore", "source": "partiful"}
 PARTIFUL_CAL = {"api_id": "partiful", "name": "Partiful", "slug": None, "avatar_url": None,
                 "tint_color": "#ff5c8a", "url": "https://partiful.com/events", "source": "partiful"}
 API = "https://api.luma.com"
@@ -384,6 +390,148 @@ def fetch_partiful(url):
     return out
 
 
+# ---------- partiful api (firebase callables, same ones partiful.com uses) ----------
+
+def partiful_id_token():
+    """Return a valid Firebase ID token for the stored Partiful login, refreshing it when needed."""
+    auth = load_json(PARTIFUL_AUTH_FILE)
+    if not auth:
+        return None
+    if auth.get("id_token") and auth.get("expires_at", 0) > time.time() + 60:
+        return auth["id_token"]
+    req = urllib.request.Request(
+        f"https://securetoken.googleapis.com/v1/token?key={PARTIFUL_FIREBASE_KEY}",
+        data=json.dumps({"grant_type": "refresh_token", "refresh_token": auth["refresh_token"]}).encode(),
+        headers={"content-type": "application/json", "referer": "https://partiful.com/", "user-agent": UA}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            tok = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors="replace")
+        if "INVALID_REFRESH_TOKEN" in body or "TOKEN_EXPIRED" in body or "USER_DISABLED" in body:
+            os.remove(PARTIFUL_AUTH_FILE)
+        raise ValueError(f"Partiful login expired ({e.code})")
+    auth.update({"id_token": tok["id_token"], "refresh_token": tok.get("refresh_token", auth["refresh_token"]),
+                 "uid": tok.get("user_id", auth.get("uid")), "expires_at": time.time() + int(tok.get("expires_in", 3600))})
+    save_json(PARTIFUL_AUTH_FILE, auth)
+    return auth["id_token"]
+
+
+def partiful_call(name, params=None):
+    token = partiful_id_token()
+    if not token:
+        raise ValueError("no Partiful login")
+    uid = (load_json(PARTIFUL_AUTH_FILE) or {}).get("uid")
+    body = {"data": {"params": params or {}, "userId": uid}}
+    req = urllib.request.Request(PARTIFUL_API + "/" + name, data=json.dumps(body).encode(), method="POST", headers={
+        "content-type": "application/json", "authorization": "Bearer " + token, "origin": "https://partiful.com",
+        "referer": "https://partiful.com/", "user-agent": UA})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read()).get("result")
+    except urllib.error.HTTPError as e:
+        raise ValueError(f"{name}: {e.code} {e.read().decode(errors='replace')[:200]}")
+
+
+def _first(d, *keys):
+    for k in keys:
+        v = d.get(k)
+        if v not in (None, ""):
+            return v
+    return None
+
+
+def _iso(v):
+    """Coerce Partiful date shapes (ISO string, epoch ms, Firestore {seconds}) to an ISO UTC string."""
+    try:
+        if isinstance(v, dict):
+            v = v.get("seconds") or v.get("_seconds")
+            if v is None:
+                return None
+            return datetime.fromtimestamp(int(v), tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        if isinstance(v, (int, float)):
+            if v > 1e12:
+                v = v / 1000
+            return datetime.fromtimestamp(v, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        if isinstance(v, str):
+            return datetime.fromisoformat(v.replace("Z", "+00:00")).astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    except (ValueError, OverflowError, OSError):
+        return None
+    return None
+
+
+def find_partiful_events(obj, out):
+    """Walk a callable's result and pull out anything shaped like an event."""
+    if isinstance(obj, dict):
+        title = _first(obj, "title", "name")
+        start = _first(obj, "startDate", "startTime", "start_date", "start", "date")
+        if title and start and _first(obj, "id", "eventId", "slug"):
+            out.append(obj)
+            return
+        for v in obj.values():
+            find_partiful_events(v, out)
+    elif isinstance(obj, list):
+        for v in obj:
+            find_partiful_events(v, out)
+
+
+def normalize_partiful_event(ev, cal_id, going):
+    evid = str(_first(ev, "id", "eventId", "slug"))
+    start = _iso(_first(ev, "startDate", "startTime", "start_date", "start", "date"))
+    if not start:
+        return None
+    end = _iso(_first(ev, "endDate", "endTime", "end_date", "end"))
+    loc = _first(ev, "location", "address", "venue", "locationName")
+    if isinstance(loc, dict):
+        loc = _first(loc, "name", "address", "formattedAddress", "city", "description")
+    hosts = ev.get("hosts") or ev.get("hostNames") or []
+    if isinstance(hosts, list):
+        hosts = [h.get("name") if isinstance(h, dict) else str(h) for h in hosts]
+        hosts = [h for h in hosts if h]
+    else:
+        hosts = []
+    status = str(_first(ev, "rsvpStatus", "status", "myStatus", "guestStatus") or "").lower()
+    if status in ("going", "yes", "approved", "host", "hosting", "maybe"):
+        going = True
+    return {
+        "api_id": "pf-" + evid, "name": _first(ev, "title", "name"), "url": "https://partiful.com/e/" + evid,
+        "start_at": start, "end_at": end, "timezone": _first(ev, "timezone", "timeZone"), "all_day": False,
+        "cover_url": _first(ev, "imageUrl", "image", "coverImageUrl", "posterUrl"),
+        "location_type": "offline" if loc else "unknown", "city": loc if isinstance(loc, str) else None,
+        "hosts": hosts, "calendar_api_id": cal_id, "going": going, "guest_status": status or None, "source": "partiful",
+    }
+
+
+def fetch_partiful_api(errors):
+    """Events from people/orgs the user follows plus their own upcoming events, via Partiful's callables."""
+    events, calendars, debug = {}, [], {}
+    for fn, cal, going in (("getMyFollowedEvents", PARTIFUL_FOLLOW_CAL, False), ("getMyUpcomingEventsForHomePage", PARTIFUL_CAL, True)):
+        try:
+            res = partiful_call(fn)
+        except Exception as e:
+            errors.append(f"Partiful {fn}: {e}")
+            continue
+        debug[fn] = res
+        found = []
+        find_partiful_events(res, found)
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        n = 0
+        for raw in found:
+            ev = normalize_partiful_event(raw, cal["api_id"], going)
+            if not ev or ev["start_at"] < cutoff:
+                continue
+            if ev["api_id"] in events:
+                events[ev["api_id"]]["going"] = events[ev["api_id"]]["going"] or ev["going"]
+            else:
+                events[ev["api_id"]] = ev
+                n += 1
+        log(f"partiful {fn}: {len(found)} event-like objects, {n} upcoming")
+        if all(c["api_id"] != cal["api_id"] for c in calendars):
+            calendars.append(dict(cal))
+    save_json(PARTIFUL_DEBUG_FILE, debug)
+    return calendars, list(events.values())
+
+
 # ---------- data ----------
 
 def normalize_calendar(item):
@@ -521,7 +669,8 @@ def load_cache():
 
 def refresh(force=False):
     sess, pf = load_session(), load_partiful()
-    if not sess and not pf and not load_json(LUMA_CALS_FILE) and not load_json(LUMA_ICS_FILE):
+    pf_auth = load_json(PARTIFUL_AUTH_FILE)
+    if not sess and not pf and not pf_auth and not load_json(LUMA_CALS_FILE) and not load_json(LUMA_ICS_FILE):
         return
     with lock:
         if state["refreshing"]:
@@ -548,12 +697,19 @@ def refresh(force=False):
                 else:  # keep the previous Luma data rather than blanking it
                     data["calendars"] += [c for c in old.get("calendars", []) if c.get("source") == "luma"]
                     data["events"] += [e2 for e2 in old.get("events", []) if e2.get("source") == "luma"]
+        if pf_auth:
+            pf_cals, pf_api_events = fetch_partiful_api(data["errors"])
+            data["calendars"] += pf_cals
+            data["events"] += pf_api_events
         if pf:
             try:
                 pf_events = fetch_partiful(pf["url"])
-                data["calendars"].append(dict(PARTIFUL_CAL))
+                have = {e2["url"] for e2 in data["events"] if e2.get("source") == "partiful"}
+                pf_events = [e2 for e2 in pf_events if e2["url"] not in have]
+                if all(c["api_id"] != PARTIFUL_CAL["api_id"] for c in data["calendars"]):
+                    data["calendars"].append(dict(PARTIFUL_CAL))
                 data["events"] += pf_events
-                log(f"partiful: {len(pf_events)} events")
+                log(f"partiful feed: {len(pf_events)} events")
             except Exception as e:
                 log("partiful refresh failed:", repr(e))
                 data["errors"].append(f"Partiful: {e}")
@@ -641,10 +797,11 @@ class Handler(BaseHTTPRequestHandler):
             data = load_cache() or {}
             manual = load_json(LUMA_CALS_FILE, [])
             ics_cfg = load_json(LUMA_ICS_FILE)
-            configured = bool(sess) or bool(pf) or bool(manual) or bool(ics_cfg)
+            pf_auth = load_json(PARTIFUL_AUTH_FILE)
+            configured = bool(sess) or bool(pf) or bool(manual) or bool(ics_cfg) or bool(pf_auth)
             return self.send_json({"signed_in": configured, "luma_signed_in": bool(sess), "luma_manual": manual,
                                    "luma_ics_url": (ics_cfg or {}).get("url"),
-                                   "email": (sess or {}).get("email"), "partiful_url": (pf or {}).get("url"),
+                                   "email": (sess or {}).get("email"), "partiful_url": (pf or {}).get("url"), "partiful_connected": bool(pf_auth),
                                    "refreshing": state["refreshing"], "last_error": state["last_error"],
                                    "fetched_at": data.get("fetched_at"), "calendars": data.get("calendars", []),
                                    "events": data.get("events", []), "errors": data.get("errors", [])})
@@ -761,6 +918,25 @@ class Handler(BaseHTTPRequestHandler):
                 save_json(LUMA_ICS_FILE, {"url": url})
                 threading.Thread(target=refresh, daemon=True).start()
                 return self.send_json({"ok": True, "events": n})
+            if path == "/api/partiful/import":
+                payload = body.get("payload") or {}
+                rt = (payload.get("refresh_token") or "").strip()
+                if not rt:
+                    return self.send_json({"error": "no Partiful login in that payload"}, 400)
+                save_json(PARTIFUL_AUTH_FILE, {"refresh_token": rt, "uid": payload.get("uid"), "id_token": None, "expires_at": 0})
+                try:
+                    partiful_id_token()
+                except Exception as e:
+                    return self.send_json({"error": str(e)}, 400)
+                threading.Thread(target=refresh, daemon=True).start()
+                return self.send_json({"ok": True})
+            if path == "/api/partiful/disconnect":
+                try:
+                    os.remove(PARTIFUL_AUTH_FILE)
+                except OSError:
+                    pass
+                threading.Thread(target=refresh, daemon=True).start()
+                return self.send_json({"ok": True})
             if path == "/api/partiful":
                 url = (body.get("url") or "").strip()
                 if not url:
@@ -776,7 +952,7 @@ class Handler(BaseHTTPRequestHandler):
                 threading.Thread(target=refresh, daemon=True).start()
                 return self.send_json({"ok": True, "events": n})
             if path == "/api/refresh":
-                if not (load_session() or load_partiful() or load_json(LUMA_CALS_FILE) or load_json(LUMA_ICS_FILE)):
+                if not (load_session() or load_partiful() or load_json(LUMA_CALS_FILE) or load_json(LUMA_ICS_FILE) or load_json(PARTIFUL_AUTH_FILE)):
                     return self.send_json({"error": "not signed in"}, 401)
                 threading.Thread(target=refresh, daemon=True).start()
                 return self.send_json({"ok": True})
