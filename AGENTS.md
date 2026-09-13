@@ -8,7 +8,7 @@ API at all, but each account gets a personal iCalendar feed, which we poll.
 ## Stack (dependency-free)
 
 - `server.py` — stdlib `http.server`, binds `127.0.0.1:8771`. Serves `web/` and a JSON API.
-  Sees paths at `/` (nginx strips `/luma/`). Background thread refreshes every 30 min.
+  Sees paths at `/` (nginx strips `/events/`). Background thread refreshes every 30 min.
 - `web/` — vanilla JS single page: month grid + list view, per-calendar colours and filters,
   "going only" toggle, event popover linking to Luma/Partiful.
 - `cache.json` (gitignored) — last successful pull. `feed.ics` is generated from it so the
@@ -20,7 +20,7 @@ API at all, but each account gets a personal iCalendar feed, which we poll.
 1. **Calendar links** (default): musnit pastes luma.com calendar links; `resolve_luma_link` loads the
    page's `__NEXT_DATA__` and finds the calendar object. Stored in `.luma_calendars.json`.
 2. **Bookmarklet**: run on luma.com, it fetches `/home/get-following-calendars` with the browser's
-   cookies and redirects to `/luma/#import=<base64 json>`; the frontend posts it to `/api/luma/import`.
+   cookies and redirects to `/events/#import=<base64 json>`; the frontend posts it to `/api/events/import`.
 3. **Session cookie** (desktop only): paste `luma.auth-session-key`; then the followed list and
    registered events sync automatically. The email-code flow is blocked by Luma's Turnstile check.
 4. **Personal iCal feed** (optional): Settings → Calendar Syncing link; marks registered events ✓.
@@ -53,8 +53,8 @@ webcal→https, parses VEVENTs (TZID, UTC and all-day DATE forms), drops events 
 
 - systemd user service `luma-cal.service` (`deploy/luma-cal.service`). Restart after editing
   the server: `systemctl --user restart luma-cal`.
-- Route `https://clawd.musnitzky.com/luma/` via the agentlab-nginx container behind Authelia.
-  Route file `deploy/luma.conf` → `/home/ubuntu/agentlab/services/nginx/routes/luma.conf`,
+- Route `https://clawd.musnitzky.com/events/` via the agentlab-nginx container behind Authelia.
+  Route file `deploy/events.conf` → `/home/ubuntu/agentlab/services/nginx/routes/events.conf`,
   then `docker exec agentlab-nginx nginx -t && docker exec agentlab-nginx nginx -s reload`.
 - Port 8771 (8765/8766/8770 are property-comps, furnishing, home-ops).
 
