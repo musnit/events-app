@@ -71,3 +71,4 @@ main { padding:16px; }
 .seg button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
 #list .empty { color:var(--muted); padding:20px 0; }
 [hidden] { display:none !important; }
+select { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:5px 8px; font:inherit; }

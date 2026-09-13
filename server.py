@@ -532,6 +532,46 @@ def fetch_partiful_api(errors):
     return calendars, list(events.values())
 
 
+# ---------- area classification ----------
+
+BAY_BBOX = (36.85, 38.60, -123.15, -121.15)  # lat_min, lat_max, lng_min, lng_max: SF Bay Area incl. Santa Cruz/Napa edges
+BAY_CITIES = {"san francisco", "oakland", "berkeley", "emeryville", "alameda", "san jose", "palo alto", "menlo park",
+              "mountain view", "sunnyvale", "santa clara", "cupertino", "redwood city", "san mateo", "south san francisco",
+              "daly city", "burlingame", "millbrae", "foster city", "belmont", "san carlos", "los altos", "los gatos",
+              "campbell", "milpitas", "fremont", "hayward", "union city", "newark", "san leandro", "richmond", "el cerrito",
+              "albany", "walnut creek", "concord", "pleasanton", "livermore", "dublin", "san rafael", "sausalito",
+              "mill valley", "novato", "tiburon", "san gregorio", "half moon bay", "pacifica", "santa cruz", "napa",
+              "sonoma", "petaluma", "santa rosa", "stanford", "brisbane", "sf", "east bay", "south bay", "peninsula",
+              "bay area", "marin", "marin county", "san mateo county", "santa clara county", "alameda county"}
+BAY_TEXT_RE = re.compile(r"\b(san francisco|s\.?f\.?|bay area|oakland|berkeley|palo alto|menlo park|mountain view|sunnyvale|"
+                         r"san jose|redwood city|san mateo|emeryville|alameda|marin|sausalito|mill valley|santa clara|"
+                         r"cupertino|fremont|hayward|walnut creek|half moon bay|napa|sonoma|petaluma|stanford)\b|"
+                         r"\bCA\s+9[45]\d{3}\b", re.I)
+ONLINE_TYPES = {"zoom", "meet", "google_meet", "online", "virtual", "teams", "youtube", "twitch", "webinar", "livestream", "link"}
+
+
+def classify_area(ev):
+    """Tag an event as bay / online / other / unknown so the UI can filter to the Bay Area."""
+    lt = (ev.get("location_type") or "").lower()
+    if lt in ONLINE_TYPES:
+        return "online"
+    lat, lng = ev.get("lat"), ev.get("lng")
+    if lat is not None and lng is not None:
+        return "bay" if BAY_BBOX[0] <= lat <= BAY_BBOX[1] and BAY_BBOX[2] <= lng <= BAY_BBOX[3] else "other"
+    city = (ev.get("city") or "").strip().lower()
+    if city:
+        if city in BAY_CITIES or BAY_TEXT_RE.search(city):
+            return "bay"
+        if ev.get("region") and ev.get("country"):
+            return "other"
+    text = " ".join(str(x) for x in (ev.get("address"), ev.get("city"), ev.get("name")) if x)
+    if BAY_TEXT_RE.search(text):
+        return "bay"
+    if ev.get("region") or ev.get("country") or ev.get("address"):
+        return "other"
+    return "unknown"
+
+
 # ---------- data ----------
 
 def normalize_calendar(item):
@@ -562,10 +602,14 @@ def normalize_event(entry, cal_id, going=False):
     guest = entry.get("guest_info") or {}
     if guest.get("approval_status") in ("approved", "pending_approval", "waitlist"):
         going = True
-    return {
+    coord = ev.get("coordinate") or geo.get("place_coordinate") or {}
+    out = {
         "api_id": ev["api_id"],
         "name": ev.get("name"),
         "url": "https://luma.com/" + (ev.get("url") or ev["api_id"]),
+        "lat": coord.get("latitude"), "lng": coord.get("longitude"),
+        "region": geo.get("region_short") or geo.get("region"), "country": geo.get("country_code"),
+        "address": geo.get("short_address") or geo.get("full_address") or geo.get("address"),
         "start_at": ev.get("start_at"),
         "end_at": ev.get("end_at"),
         "timezone": ev.get("timezone"),
@@ -577,6 +621,8 @@ def normalize_event(entry, cal_id, going=False):
         "going": going,
         "guest_status": guest.get("approval_status"),
     }
+    out["area"] = classify_area(out)
+    return out
 
 
 def fetch_all(session_key, errors_out=None):
@@ -715,6 +761,9 @@ def refresh(force=False):
                 data["errors"].append(f"Partiful: {e}")
                 data["calendars"] += [c for c in old.get("calendars", []) if c.get("source") == "partiful"]
                 data["events"] += [e2 for e2 in old.get("events", []) if e2.get("source") == "partiful"]
+        for ev in data["events"]:
+            if not ev.get("area"):
+                ev["area"] = classify_area(ev)
         data["events"].sort(key=lambda e: e["start_at"] or "")
         tmp = CACHE_FILE + ".tmp"
         with open(tmp, "w") as f:

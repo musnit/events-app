@@ -1,6 +1,6 @@
 // Luma followed-calendars view. Talks to the local server with relative URLs so it works under /luma/.
 const $ = (s) => document.querySelector(s);
-const state = { data: null, month: startOfMonth(new Date()), day: new Date(), hidden: new Set(), goingOnly: false, view: 'grid', email: '' };
+const state = { data: null, month: startOfMonth(new Date()), day: new Date(), hidden: new Set(), goingOnly: false, area: localStorage.getItem('area') || 'bay', view: 'grid', email: '' };
 const PALETTE = ['#7c9cff','#ff8a65','#4dd0a1','#ffca4d','#c884ff','#4fc3f7','#f06292','#a5d66f','#ffab40','#80cbc4','#b39ddb','#e57373'];
 
 function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
@@ -93,14 +93,22 @@ function render(s) {
   $('#status').textContent = `${s.events.length} events · updated ${when}` + (s.refreshing ? ' · refreshing…' : '') + (s.last_error ? ' · ' + s.last_error : '') + (s.errors.length ? ` · ${s.errors.length} calendar errors` : '');
 }
 
+function inArea(e) {
+  if (state.area === 'all') return true;
+  const a = e.area || 'unknown';
+  // Unknown-location events in Pacific time are most likely local, so they stay in the Bay Area view.
+  const likelyLocal = a === 'unknown' && /America\/Los_Angeles|US\/Pacific/.test(e.timezone || '');
+  if (a === 'bay' || likelyLocal) return true;
+  return state.area === 'bay+online' && a === 'online';
+}
 function visibleEvents() {
-  return state.data.events.filter(e => !state.hidden.has(e.calendar_api_id) && (!state.goingOnly || e.going));
+  return state.data.events.filter(e => inArea(e) && !state.hidden.has(e.calendar_api_id) && (!state.goingOnly || e.going));
 }
 function calOf(e) { return state.data.calendars.find(c => c.api_id === e.calendar_api_id) || {}; }
 
 function renderSidebar() {
   const counts = {};
-  state.data.events.forEach(e => { counts[e.calendar_api_id] = (counts[e.calendar_api_id] || 0) + 1; });
+  state.data.events.filter(inArea).forEach(e => { counts[e.calendar_api_id] = (counts[e.calendar_api_id] || 0) + 1; });
   const ul = $('#cal-list'); ul.innerHTML = '';
   [...state.data.calendars].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })).forEach(c => {
     const li = document.createElement('li');
@@ -113,6 +121,8 @@ function renderSidebar() {
 $('#all-cals').onclick = () => { state.hidden.clear(); renderSidebar(); renderMain(); };
 $('#no-cals').onclick = () => { state.data.calendars.forEach(c => state.hidden.add(c.api_id)); renderSidebar(); renderMain(); };
 $('#going-only').onchange = (e) => { state.goingOnly = e.target.checked; renderMain(); };
+$('#area').value = state.area;
+$('#area').onchange = (e) => { state.area = e.target.value; localStorage.setItem('area', state.area); renderSidebar(); renderMain(); };
 function setView(v) { state.view = v; localStorage.setItem('view', v); ['day','grid','list'].forEach(x => $('#view-' + x).classList.toggle('on', x === v)); renderMain(); }
 $('#view-grid').onclick = () => { state.month = startOfMonth(new Date()); setView('grid'); };
 $('#view-list').onclick = () => { state.month = startOfMonth(new Date()); setView('list'); };
