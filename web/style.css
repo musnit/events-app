@@ -72,7 +72,7 @@ main { padding:16px; }
 #list .empty { color:var(--muted); padding:20px 0; }
 [hidden] { display:none !important; }
 select { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:5px 8px; font:inherit; }
-#list.day-mode { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:12px; }
+#list.day-mode { display:flex; flex-direction:column; gap:12px; max-width:760px; }
 .card { display:grid; grid-template-columns:120px 1fr; background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--c,var(--accent)); border-radius:10px; overflow:hidden; cursor:pointer; }
 .card > img, .card .noimg { width:120px; height:120px; object-fit:cover; background:color-mix(in srgb, var(--c,var(--accent)) 18%, var(--panel)); }
 .card .body { padding:10px 12px; min-width:0; }
