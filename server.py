@@ -484,12 +484,14 @@ def normalize_partiful_event(ev, cal_id, going):
     loc = _first(ev, "location", "address", "venue", "locationName")
     if isinstance(loc, dict):
         loc = _first(loc, "name", "address", "formattedAddress", "city", "description")
-    hosts = ev.get("hosts") or ev.get("hostNames") or []
-    if isinstance(hosts, list):
-        hosts = [h.get("name") if isinstance(h, dict) else str(h) for h in hosts]
-        hosts = [h for h in hosts if h]
-    else:
-        hosts = []
+    raw_hosts = ev.get("hosts") or ev.get("hostNames") or []
+    hosts, host_avatars = [], []
+    if isinstance(raw_hosts, list):
+        for h in raw_hosts:
+            name = _first(h, "name", "displayName", "fullName") if isinstance(h, dict) else str(h)
+            if name:
+                hosts.append(name)
+                host_avatars.append((_first(h, "avatarUrl", "profileImageUrl", "photoUrl", "imageUrl", "photoURL") if isinstance(h, dict) else "") or "")
     status = str(_first(ev, "rsvpStatus", "status", "myStatus", "guestStatus") or "").lower()
     if status in ("going", "yes", "approved", "host", "hosting", "maybe"):
         going = True
@@ -498,7 +500,7 @@ def normalize_partiful_event(ev, cal_id, going):
         "start_at": start, "end_at": end, "timezone": _first(ev, "timezone", "timeZone"), "all_day": False,
         "cover_url": _first(ev, "imageUrl", "image", "coverImageUrl", "posterUrl"),
         "location_type": "offline" if loc else "unknown", "city": loc if isinstance(loc, str) else None,
-        "hosts": hosts, "calendar_api_id": cal_id, "going": going, "guest_status": status or None, "source": "partiful",
+        "hosts": hosts, "host_avatars": host_avatars, "calendar_api_id": cal_id, "going": going, "guest_status": status or None, "source": "partiful",
     }
 
 
@@ -599,6 +601,7 @@ def normalize_event(entry, cal_id, going=False):
         return None
     geo = ev.get("geo_address_info") or {}
     hosts = [h.get("name") for h in entry.get("hosts") or [] if h.get("name")]
+    host_avatars = [h.get("avatar_url") or "" for h in entry.get("hosts") or [] if h.get("name")]
     guest = entry.get("guest_info") or {}
     if guest.get("approval_status") in ("approved", "pending_approval", "waitlist"):
         going = True
@@ -616,7 +619,7 @@ def normalize_event(entry, cal_id, going=False):
         "cover_url": ev.get("cover_url"),
         "location_type": ev.get("location_type"),
         "city": geo.get("city") or geo.get("city_state") or geo.get("full_address"),
-        "hosts": hosts,
+        "hosts": hosts, "host_avatars": host_avatars,
         "calendar_api_id": cal_id or ev.get("calendar_api_id"),
         "going": going,
         "guest_status": guest.get("approval_status"),

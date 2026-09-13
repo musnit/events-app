@@ -72,3 +72,14 @@ main { padding:16px; }
 #list .empty { color:var(--muted); padding:20px 0; }
 [hidden] { display:none !important; }
 select { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:5px 8px; font:inherit; }
+#list.day-mode { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:12px; }
+.card { display:grid; grid-template-columns:120px 1fr; background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--c,var(--accent)); border-radius:10px; overflow:hidden; cursor:pointer; }
+.card > img, .card .noimg { width:120px; height:120px; object-fit:cover; background:color-mix(in srgb, var(--c,var(--accent)) 18%, var(--panel)); }
+.card .body { padding:10px 12px; min-width:0; }
+.card .when { font-size:13px; color:var(--muted); }
+.card .title { font-size:16px; font-weight:600; margin:2px 0 4px; line-height:1.25; }
+.card .meta { font-size:13px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@media (max-width:600px) { .card { grid-template-columns:96px 1fr; } .card > img, .card .noimg { width:96px; height:96px; } .card .title { font-size:15px; } }
+.av { width:18px; height:18px; border-radius:50%; object-fit:cover; vertical-align:middle; margin-right:4px; border:1px solid var(--line); }
+.hosts .av + .av { margin-left:-8px; }
+.card .meta { white-space:normal; }

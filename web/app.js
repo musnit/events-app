@@ -150,7 +150,25 @@ function renderDay() {
   const l = $('#list'); l.innerHTML = '';
   const evs = (groupByDay(visibleEvents())[dayKey(state.day)] || []).sort((a, b) => a.start_at.localeCompare(b.start_at));
   if (!evs.length) { l.innerHTML = '<p class="empty">Nothing on this day from the calendars you have turned on.</p>'; return; }
-  evs.forEach(e => l.appendChild(listRow(e)));
+  l.classList.add('day-mode');
+  evs.forEach(e => l.appendChild(dayCard(e)));
+}
+
+function hostAvatars(e) {
+  return (e.host_avatars || []).slice(0, 3).filter(Boolean).map(u => `<img class="av" src="${u}" alt="" loading="lazy">`).join('');
+}
+function dayCard(e) {
+  const c = calOf(e);
+  const card = document.createElement('div'); card.className = 'card'; card.style.setProperty('--c', c.color || '');
+  const end = e.end_at ? ' – ' + fmtTime(e.end_at) : '';
+  const where = e.city ? escapeHtml(e.city) : (e.area === 'online' || e.location_type === 'online' ? 'online' : '');
+  card.innerHTML = (e.cover_url ? `<img src="${e.cover_url}" alt="" loading="lazy">` : '<div class="noimg"></div>') +
+    `<div class="body"><div class="when">${e.all_day ? 'All day' : fmtTime(e.start_at) + end}</div>` +
+    `<div class="title">${e.going ? '✓ ' : ''}${escapeHtml(e.name || '')}</div>` +
+    `<div class="meta">${c.avatar_url ? `<img class="av" src="${c.avatar_url}" alt="">` : ''}${escapeHtml(c.name || '')}${where ? ' · ' + where : ''}</div>` +
+    (e.hosts.length ? `<div class="meta hosts">${hostAvatars(e)}${escapeHtml(e.hosts.slice(0, 3).join(', '))}${e.hosts.length > 3 ? ` +${e.hosts.length - 3}` : ''}</div>` : '') + `</div>`;
+  card.onclick = (ev) => showPopover(e, ev);
+  return card;
 }
 
 function listRow(e) {
@@ -201,7 +219,7 @@ function renderGrid() {
 }
 
 function renderList() {
-  const l = $('#list'); l.innerHTML = '';
+  const l = $('#list'); l.innerHTML = ''; l.classList.remove('day-mode');
   const by = groupByDay(visibleEvents());
   const keys = Object.keys(by).sort().filter(k => k.startsWith(`${state.month.getFullYear()}-${String(state.month.getMonth()+1).padStart(2,'0')}`));
   if (!keys.length) l.innerHTML = '<p class="msg">No events this month.</p>';
@@ -216,7 +234,7 @@ function showPopover(e, ev) {
   const c = calOf(e);
   const p = $('#popover');
   const end = e.end_at ? ' – ' + fmtTime(e.end_at) : '';
-  p.innerHTML = (e.cover_url ? `<img src="${e.cover_url}" alt="">` : '') + `<h3>${escapeHtml(e.name || '')}</h3><div class="meta">${fmtDay(new Date(e.start_at))} · ${fmtTime(e.start_at)}${end}<br>${escapeHtml(c.name || '')}${e.city ? ' · ' + escapeHtml(e.city) : (e.location_type === 'online' ? ' · online' : '')}${e.hosts.length ? '<br>Hosted by ' + escapeHtml(e.hosts.join(', ')) : ''}${e.going ? '<br>You are ' + escapeHtml(e.guest_status || 'registered') : ''}</div><a href="${e.url}" target="_blank" rel="noopener">Open on Luma ↗</a>`;
+  p.innerHTML = (e.cover_url ? `<img src="${e.cover_url}" alt="">` : '') + `<h3>${escapeHtml(e.name || '')}</h3><div class="meta">${fmtDay(new Date(e.start_at))} · ${fmtTime(e.start_at)}${end}<br>${escapeHtml(c.name || '')}${e.city ? ' · ' + escapeHtml(e.city) : (e.location_type === 'online' ? ' · online' : '')}${e.hosts.length ? '<br>' + hostAvatars(e) + 'Hosted by ' + escapeHtml(e.hosts.join(', ')) : ''}${e.going ? '<br>You are ' + escapeHtml(e.guest_status || 'registered') : ''}</div><a href="${e.url}" target="_blank" rel="noopener">Open on Luma ↗</a>`;
   p.hidden = false;
   const x = Math.min(ev.clientX, window.innerWidth - 360), y = Math.min(ev.clientY + 8, window.innerHeight - 300);
   p.style.left = Math.max(8, x) + 'px'; p.style.top = Math.max(8, y) + 'px';
