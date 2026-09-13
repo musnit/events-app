@@ -20,7 +20,7 @@ API at all, but each account gets a personal iCalendar feed, which we poll.
 1. **Calendar links** (default): musnit pastes luma.com calendar links; `resolve_luma_link` loads the
    page's `__NEXT_DATA__` and finds the calendar object. Stored in `.luma_calendars.json`.
 2. **Bookmarklet**: run on luma.com, it fetches `/home/get-following-calendars` with the browser's
-   cookies and redirects to `/events/#import=<base64 json>`; the frontend posts it to `/api/events/import`.
+   cookies and redirects to `/events/#import=<base64 json>`; the frontend posts it to `/api/luma/import`.
 3. **Session cookie** (desktop only): paste `luma.auth-session-key`; then the followed list and
    registered events sync automatically. The email-code flow is blocked by Luma's Turnstile check.
 4. **Personal iCal feed** (optional): Settings → Calendar Syncing link; marks registered events ✓.
