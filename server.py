@@ -595,13 +595,35 @@ def normalize_calendar(item):
     }
 
 
+ORG_WORDS_RE = re.compile(r"\b(club|lab|labs|house|society|community|collective|group|network|team|events|inc|co|ventures|"
+                          r"capital|foundation|institute|university|studio|studios|ai|meetup|commons|hub|school|academy|"
+                          r"alliance|association|council|guild|company|partners|fund|accelerator|incubator|org)\b|&", re.I)
+
+
+def host_org_score(h):
+    """Higher when a Luma host record looks like an organisation rather than a person."""
+    name = (h.get("name") or "").strip()
+    personal = " ".join(x for x in ((h.get("first_name") or "").strip(), (h.get("last_name") or "").strip()) if x)
+    score = 0
+    if personal and name.lower() != personal.lower():
+        score += 2  # display name differs from the person's own name, e.g. "Weights & Biases"
+    if ORG_WORDS_RE.search(name):
+        score += 2
+    if h.get("website"):
+        score += 1
+    if len(name.split()) >= 3 or "-" in name or "|" in name:
+        score += 1
+    return score
+
+
 def normalize_event(entry, cal_id, going=False):
     ev = entry.get("event") or {}
     if not ev.get("api_id"):
         return None
     geo = ev.get("geo_address_info") or {}
-    hosts = [h.get("name") for h in entry.get("hosts") or [] if h.get("name")]
-    host_avatars = [h.get("avatar_url") or "" for h in entry.get("hosts") or [] if h.get("name")]
+    ordered = sorted((h for h in entry.get("hosts") or [] if h.get("name")), key=host_org_score, reverse=True)
+    hosts = [h["name"] for h in ordered]
+    host_avatars = [h.get("avatar_url") or "" for h in ordered]
     guest = entry.get("guest_info") or {}
     if guest.get("approval_status") in ("approved", "pending_approval", "waitlist"):
         going = True

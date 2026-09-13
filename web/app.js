@@ -162,13 +162,16 @@ function dayCard(e) {
   const card = document.createElement('div'); card.className = 'card'; card.style.setProperty('--c', c.color || '');
   const end = e.end_at ? ' – ' + fmtTime(e.end_at) : '';
   const where = e.city ? escapeHtml(e.city) : (e.area === 'online' || e.location_type === 'online' ? 'online' : '');
-  const hostLine = e.hosts.length
-    ? `<div class="hosts">${hostAvatars(e)}<span>${escapeHtml(e.hosts.slice(0, 3).join(', '))}${e.hosts.length > 3 ? ` +${e.hosts.length - 3}` : ''}</span></div>`
-    : `<div class="hosts">${c.avatar_url ? `<img class="av" src="${c.avatar_url}" alt="">` : ''}<span>${escapeHtml(c.name || '')}</span></div>`;
+  // The calendar is the group or community, so it leads; individual hosts follow, org-looking ones first.
+  const calName = (c.name || '').trim().toLowerCase();
+  const people = e.hosts.map((n, i) => ({ n, a: (e.host_avatars || [])[i] })).filter(h => h.n.trim().toLowerCase() !== calName);
+  const avs = [c.avatar_url, ...people.slice(0, 2).map(h => h.a)].filter(Boolean).map(u => `<img class="av" src="${u}" alt="" loading="lazy">`).join('');
+  const names = [c.name, ...people.slice(0, 2).map(h => h.n)].filter(Boolean).join(' · ') + (people.length > 2 ? ` +${people.length - 2}` : '');
+  const hostLine = `<div class="hosts">${avs}<span>${escapeHtml(names)}</span></div>`;
   card.innerHTML = (e.cover_url ? `<img src="${e.cover_url}" alt="" loading="lazy">` : '<div class="noimg"></div>') +
     `<div class="body">${hostLine}<div class="when">${e.all_day ? 'All day' : fmtTime(e.start_at) + end}</div>` +
     `<div class="title">${e.going ? '✓ ' : ''}${escapeHtml(e.name || '')}</div>` +
-    `<div class="meta">${escapeHtml(c.name || '')}${where ? ' · ' + where : ''}</div></div>`;
+    (where ? `<div class="meta">${where}</div>` : '') + `</div>`;
   card.onclick = (ev) => showPopover(e, ev);
   return card;
 }
@@ -238,8 +241,13 @@ function showPopover(e, ev) {
   const end = e.end_at ? ' – ' + fmtTime(e.end_at) : '';
   p.innerHTML = (e.cover_url ? `<img src="${e.cover_url}" alt="">` : '') + `<h3>${escapeHtml(e.name || '')}</h3><div class="meta">${fmtDay(new Date(e.start_at))} · ${fmtTime(e.start_at)}${end}<br>${escapeHtml(c.name || '')}${e.city ? ' · ' + escapeHtml(e.city) : (e.location_type === 'online' ? ' · online' : '')}${e.hosts.length ? '<br>' + hostAvatars(e) + 'Hosted by ' + escapeHtml(e.hosts.join(', ')) : ''}${e.going ? '<br>You are ' + escapeHtml(e.guest_status || 'registered') : ''}</div><a href="${e.url}" target="_blank" rel="noopener">Open on Luma ↗</a>`;
   p.hidden = false;
-  const x = Math.min(ev.clientX, window.innerWidth - 360), y = Math.min(ev.clientY + 8, window.innerHeight - 300);
-  p.style.left = Math.max(8, x) + 'px'; p.style.top = Math.max(8, y) + 'px';
+  // Measure the real popover, then open it below the tap if it fits, otherwise above it.
+  const w = p.offsetWidth, h = p.offsetHeight;
+  const x = Math.max(8, Math.min(ev.clientX, window.innerWidth - w - 8));
+  let y = ev.clientY + 8;
+  if (y + h > window.innerHeight - 8) y = ev.clientY - h - 8;
+  if (y < 8) y = Math.max(8, window.innerHeight - h - 8);
+  p.style.left = x + 'px'; p.style.top = y + 'px';
 }
 document.addEventListener('click', (ev) => { if (!$('#popover').contains(ev.target)) $('#popover').hidden = true; });
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') $('#popover').hidden = true; });
