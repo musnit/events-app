@@ -84,7 +84,9 @@ function render(s) {
   $('#pf-status').textContent = s.partiful_connected ? 'Partiful is connected; following and your own events sync automatically.' : '';
   $('#pf-disconnect').hidden = !s.partiful_connected;
   if (!showApp) return;
-  s.calendars.forEach((c, i) => { c.color = c.tint_color && c.tint_color !== '#1e1e1e' ? c.tint_color : PALETTE[i % PALETTE.length]; });
+  // Colour by source, not per calendar: per-calendar colours carry no meaning with 100+ calendars.
+  const SOURCE_COLORS = { luma: PALETTE[0], partiful: '#ff5c8a' };
+  s.calendars.forEach(c => { c.color = SOURCE_COLORS[c.source] || PALETTE[0]; });
   renderSidebar();
   renderMain();
   const when = s.fetched_at ? new Date(s.fetched_at).toLocaleString() : 'never';
@@ -103,7 +105,7 @@ function renderSidebar() {
   [...state.data.calendars].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })).forEach(c => {
     const li = document.createElement('li');
     li.className = state.hidden.has(c.api_id) ? 'off' : '';
-    li.innerHTML = `<span class="swatch" style="background:${c.color}"></span>` + (c.avatar_url ? `<img src="${c.avatar_url}" alt="">` : '') + `<span class="name" title="${c.name}">${c.name}${c.not_followed ? ' *' : ''}</span><span class="count">${counts[c.api_id] || 0}</span>`;
+    li.innerHTML = (c.avatar_url ? `<img src="${c.avatar_url}" alt="">` : '') + `<span class="name" title="${c.name}">${c.name}${c.not_followed ? ' *' : ''}</span><span class="count">${counts[c.api_id] || 0}</span>`;
     li.onclick = () => { state.hidden.has(c.api_id) ? state.hidden.delete(c.api_id) : state.hidden.add(c.api_id); renderSidebar(); renderMain(); };
     ul.appendChild(li);
   });
