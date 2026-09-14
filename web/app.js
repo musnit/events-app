@@ -1,6 +1,7 @@
 // Luma followed-calendars view. Talks to the local server with relative URLs so it works under /luma/.
 const $ = (s) => document.querySelector(s);
-const state = { data: null, month: startOfMonth(new Date()), day: new Date(), hidden: new Set(), goingOnly: false, area: localStorage.getItem('area') || 'bay', view: 'day', email: '' };
+const state = { data: null, month: startOfMonth(new Date()), day: new Date(), hidden: new Set(JSON.parse(localStorage.getItem('hidden') || '[]')), goingOnly: localStorage.getItem('goingOnly') === '1', area: localStorage.getItem('area') || 'bay', view: 'list', email: '' };
+function saveHidden() { localStorage.setItem('hidden', JSON.stringify([...state.hidden])); }
 const PALETTE = ['#7c9cff','#ff8a65','#4dd0a1','#ffca4d','#c884ff','#4fc3f7','#f06292','#a5d66f','#ffab40','#80cbc4','#b39ddb','#e57373'];
 
 function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
@@ -114,16 +115,17 @@ function renderSidebar() {
     const li = document.createElement('li');
     li.className = state.hidden.has(c.api_id) ? 'off' : '';
     li.innerHTML = (c.avatar_url ? `<img src="${c.avatar_url}" alt="">` : '') + `<span class="name" title="${c.name}">${c.name}${c.not_followed ? ' *' : ''}</span><span class="count">${counts[c.api_id] || 0}</span>`;
-    li.onclick = () => { state.hidden.has(c.api_id) ? state.hidden.delete(c.api_id) : state.hidden.add(c.api_id); renderSidebar(); renderMain(); };
+    li.onclick = () => { state.hidden.has(c.api_id) ? state.hidden.delete(c.api_id) : state.hidden.add(c.api_id); saveHidden(); renderSidebar(); renderMain(); };
     ul.appendChild(li);
   });
 }
-$('#all-cals').onclick = () => { state.hidden.clear(); renderSidebar(); renderMain(); };
-$('#no-cals').onclick = () => { state.data.calendars.forEach(c => state.hidden.add(c.api_id)); renderSidebar(); renderMain(); };
-$('#going-only').onchange = (e) => { state.goingOnly = e.target.checked; renderMain(); };
+$('#all-cals').onclick = () => { state.hidden.clear(); saveHidden(); renderSidebar(); renderMain(); };
+$('#no-cals').onclick = () => { state.data.calendars.forEach(c => state.hidden.add(c.api_id)); saveHidden(); renderSidebar(); renderMain(); };
+$('#going-only').checked = state.goingOnly;
+$('#going-only').onchange = (e) => { state.goingOnly = e.target.checked; localStorage.setItem('goingOnly', state.goingOnly ? '1' : '0'); renderMain(); };
 $('#area').value = state.area;
 $('#area').onchange = (e) => { state.area = e.target.value; localStorage.setItem('area', state.area); renderSidebar(); renderMain(); };
-function setView(v) { state.view = v; ['day','grid','list'].forEach(x => $('#view-' + x).classList.toggle('on', x === v)); renderMain(); }
+function setView(v) { state.view = v; localStorage.setItem('view', v); ['day','grid','list'].forEach(x => $('#view-' + x).classList.toggle('on', x === v)); renderMain(); }
 $('#view-grid').onclick = () => { state.month = startOfMonth(new Date()); setView('grid'); };
 $('#view-list').onclick = () => { state.month = startOfMonth(new Date()); setView('list'); };
 $('#view-day').onclick = () => { state.day = new Date(); setView('day'); };
@@ -338,9 +340,10 @@ async function handleImportHash() {
   return true;
 }
 
-// Every load opens on Today; ?view=month or ?view=list overrides it.
-const initialView = new URLSearchParams(location.search).get('view') || 'day';
-state.view = ['day','grid','list'].includes(initialView) ? initialView : 'day';
+// Opens on the last used view (List the first time); ?view=day|month|list overrides it.
+const qv = new URLSearchParams(location.search).get('view');
+const initialView = ({ month: 'grid' })[qv] || qv || localStorage.getItem('view') || 'list';
+state.view = ['day','grid','list'].includes(initialView) ? initialView : 'list';
 ['day','grid','list'].forEach(x => $('#view-' + x).classList.toggle('on', x === state.view));
 handleImportHash().then(done => { if (!done) load(); });
 setInterval(() => { if (state.data?.signed_in && document.visibilityState === 'visible') load(); }, 5 * 60 * 1000);
