@@ -8,7 +8,7 @@ API at all, but each account gets a personal iCalendar feed, which we poll.
 ## Stack (dependency-free)
 
 - `server.py` — stdlib `http.server`, binds `127.0.0.1:8771`. Serves `web/` and a JSON API.
-  Sees paths at `/` (nginx strips `/events/`). Background thread refreshes every 30 min.
+  Sees paths at `/` (nginx strips `/events/`). Background thread refreshes every 4 h with 15 s between Luma calendar pulls (a full pass takes ~28 min); the refresh button uses 2 s spacing. Luma rate-limits bursts (429), and the app backs off and keeps a calendar's previous events when a pull fails.
 - `web/` — vanilla JS single page: month grid + list view, per-calendar colours and filters,
   "going only" toggle, event popover linking to Luma/Partiful.
 - `cache.json` (gitignored) — last successful pull. `feed.ics` is generated from it so the

@@ -37,7 +37,9 @@ PARTIFUL_CAL = {"api_id": "partiful", "name": "Partiful", "slug": None, "avatar_
                 "tint_color": "#ff5c8a", "url": "https://partiful.com/events", "source": "partiful"}
 API = "https://api.luma.com"
 PORT = int(os.environ.get("PORT", "8771"))
-REFRESH_SECONDS = int(os.environ.get("REFRESH_SECONDS", str(30 * 60)))
+REFRESH_SECONDS = int(os.environ.get("REFRESH_SECONDS", str(4 * 60 * 60)))
+CALENDAR_SPACING = float(os.environ.get("CALENDAR_SPACING", "15"))  # seconds between Luma calendar pulls on the scheduled pass
+MANUAL_SPACING = 2.0  # a refresh from the button is quicker but still gentle
 COOKIE_NAME = "luma.auth-session-key"
 UA = "Mozilla/5.0 (X11; Linux x86_64) luma-cal/1.0"
 
@@ -747,7 +749,7 @@ def normalize_event(entry, cal_id, going=False):
     return out
 
 
-def fetch_all(session_key, errors_out=None):
+def fetch_all(session_key, errors_out=None, spacing=CALENDAR_SPACING):
     """Pull followed calendars (session) plus link-added ones, every future event on each, plus registrations."""
     calendars = []
     if session_key:
@@ -785,7 +787,7 @@ def fetch_all(session_key, errors_out=None):
             if ev:
                 ev["calendar_api_id"] = cal["api_id"]
                 events[ev["api_id"]] = ev
-        time.sleep(0.4)
+        time.sleep(spacing)
 
     # Events the user registered for, whether or not they come from a followed calendar.
     mine = []
@@ -840,7 +842,7 @@ def load_cache():
         return None
 
 
-def refresh(force=False):
+def refresh(force=False, spacing=CALENDAR_SPACING):
     sess, pf = load_session(), load_partiful()
     pf_auth = load_json(PARTIFUL_AUTH_FILE)
     if not sess and not pf and not pf_auth and not load_json(LUMA_CALS_FILE) and not load_json(LUMA_ICS_FILE):
@@ -854,7 +856,7 @@ def refresh(force=False):
         data = {"fetched_at": datetime.now(timezone.utc).isoformat(), "calendars": [], "events": [], "errors": []}
         if sess or load_json(LUMA_CALS_FILE) or load_json(LUMA_ICS_FILE):
             try:
-                luma_data = fetch_all((sess or {}).get("session_key"), data["errors"])
+                luma_data = fetch_all((sess or {}).get("session_key"), data["errors"], spacing=spacing)
                 for ev in luma_data["events"]:
                     ev["source"] = "luma"
                 for c in luma_data["calendars"]:
@@ -917,9 +919,16 @@ def refresh(force=False):
 
 
 def refresher():
+    """Scheduled sync: every REFRESH_SECONDS, and on start only if the cache is already that old."""
     while True:
-        refresh()
-        time.sleep(REFRESH_SECONDS)
+        try:
+            age = time.time() - os.path.getmtime(CACHE_FILE)
+        except OSError:
+            age = REFRESH_SECONDS
+        if age >= REFRESH_SECONDS:
+            refresh()
+            age = 0
+        time.sleep(max(60, REFRESH_SECONDS - age))
 
 
 # ---------- ics ----------
@@ -1141,7 +1150,7 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/refresh":
                 if not (load_session() or load_partiful() or load_json(LUMA_CALS_FILE) or load_json(LUMA_ICS_FILE) or load_json(PARTIFUL_AUTH_FILE)):
                     return self.send_json({"error": "not signed in"}, 401)
-                threading.Thread(target=refresh, daemon=True).start()
+                threading.Thread(target=refresh, kwargs={"spacing": MANUAL_SPACING}, daemon=True).start()
                 return self.send_json({"ok": True})
         except LumaError as e:
             msg = e.body
