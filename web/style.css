@@ -94,3 +94,5 @@ select { background:var(--panel); color:var(--fg); border:1px solid var(--line);
 @media (min-width:760px) { #list.day-mode, #list.list-mode .cards { grid-template-columns:1fr 1fr; } }
 .card .noimg { display:flex; align-items:center; justify-content:center; }
 .card .noimg .ph { width:56px; height:56px; border-radius:50%; object-fit:cover; opacity:.9; }
+/* Let Chrome skip layout and paint for cards that are off screen. */
+.card { content-visibility:auto; contain-intrinsic-size:auto 140px; }

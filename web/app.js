@@ -114,7 +114,7 @@ function renderSidebar() {
   [...state.data.calendars].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })).forEach(c => {
     const li = document.createElement('li');
     li.className = state.hidden.has(c.api_id) ? 'off' : '';
-    li.innerHTML = (c.avatar_url ? `<img src="${c.avatar_url}" alt="">` : '') + `<span class="name" title="${c.name}">${c.name}${c.not_followed ? ' *' : ''}</span><span class="count">${counts[c.api_id] || 0}</span>`;
+    li.innerHTML = (c.avatar_url ? `<img src="${imgUrl(c.avatar_url, 18)}" alt="" loading="lazy">` : '') + `<span class="name" title="${c.name}">${c.name}${c.not_followed ? ' *' : ''}</span><span class="count">${counts[c.api_id] || 0}</span>`;
     li.onclick = () => { state.hidden.has(c.api_id) ? state.hidden.delete(c.api_id) : state.hidden.add(c.api_id); saveHidden(); renderSidebar(); renderMain(); };
     ul.appendChild(li);
   });
@@ -156,8 +156,26 @@ function renderDay() {
   evs.forEach(e => l.appendChild(dayCard(e)));
 }
 
+// Ask the CDNs for images sized for the card instead of the multi-megabyte originals.
+function imgUrl(u, px) {
+  if (!u) return u;
+  try {
+    const url = new URL(u);
+    if (url.hostname === 'images.lumacdn.com' && !url.pathname.startsWith('/cdn-cgi/')) {
+      return `https://images.lumacdn.com/cdn-cgi/image/format=auto,fit=cover,dpr=2,quality=75,width=${px},height=${px}${url.pathname}`;
+    }
+    if (url.hostname === 'cdn.lu.ma' && !url.pathname.startsWith('/cdn-cgi/')) {
+      return `https://cdn.lu.ma/cdn-cgi/image/format=auto,fit=cover,dpr=2,quality=75,width=${px},height=${px}${url.pathname}`;
+    }
+    if (url.hostname.endsWith('imgix.net')) {
+      url.searchParams.set('w', String(px * 2)); url.searchParams.set('h', String(px * 2)); url.searchParams.set('fit', 'crop'); url.searchParams.set('auto', 'format,compress');
+      return url.toString();
+    }
+  } catch { /* leave odd URLs alone */ }
+  return u;
+}
 function hostAvatars(e) {
-  return (e.host_avatars || []).slice(0, 3).filter(Boolean).map(u => `<img class="av" src="${u}" alt="" loading="lazy">`).join('');
+  return (e.host_avatars || []).slice(0, 3).filter(Boolean).map(u => `<img class="av" src="${imgUrl(u, 32)}" alt="" loading="lazy" decoding="async">`).join('');
 }
 function dayCard(e) {
   const c = calOf(e);
@@ -169,12 +187,12 @@ function dayCard(e) {
   const pb = e.presented_by && e.presented_by.name ? e.presented_by : c;
   const calName = (pb.name || '').trim().toLowerCase();
   const people = e.hosts.map((n, i) => ({ n, a: (e.host_avatars || [])[i] })).filter(h => h.n.trim().toLowerCase() !== calName);
-  const avs = [pb.avatar_url, ...people.slice(0, 2).map(h => h.a)].filter(Boolean).map(u => `<img class="av" src="${u}" alt="" loading="lazy">`).join('');
+  const avs = [pb.avatar_url, ...people.slice(0, 2).map(h => h.a)].filter(Boolean).map(u => `<img class="av" src="${imgUrl(u, 32)}" alt="" loading="lazy" decoding="async">`).join('');
   const names = [pb.name, ...people.slice(0, 2).map(h => h.n)].filter(Boolean).join(' · ') + (people.length > 2 ? ` +${people.length - 2}` : '');
   const hostLine = `<div class="hosts">${avs}<span>${escapeHtml(names)}</span></div>`;
   const fallbackAv = pb.avatar_url || c.avatar_url || '';
-  const placeholder = `<div class="noimg">${fallbackAv ? `<img class="ph" src="${fallbackAv}" alt="">` : ''}</div>`;
-  card.innerHTML = (e.cover_url ? `<img src="${e.cover_url}" alt="" loading="lazy" onerror="this.outerHTML=this.dataset.ph" data-ph="${escapeHtml(placeholder)}">` : placeholder) +
+  const placeholder = `<div class="noimg">${fallbackAv ? `<img class="ph" src="${imgUrl(fallbackAv, 64)}" alt="">` : ''}</div>`;
+  card.innerHTML = (e.cover_url ? `<img src="${imgUrl(e.cover_url, 160)}" alt="" loading="lazy" decoding="async" onerror="this.outerHTML=this.dataset.ph" data-ph="${escapeHtml(placeholder)}">` : placeholder) +
     `<div class="body">${hostLine}<div class="when">${e.all_day ? 'All day' : fmtTime(e.start_at) + end}</div>` +
     `<div class="title">${e.going ? '✓ ' : ''}${escapeHtml(e.name || '')}</div>` +
     (where ? `<div class="meta">${where}</div>` : '') + `</div>`;
@@ -247,7 +265,7 @@ function showPopover(e, ev) {
   const c = calOf(e);
   const p = $('#popover');
   const end = e.end_at ? ' – ' + fmtTime(e.end_at) : '';
-  p.innerHTML = (e.cover_url ? `<img src="${e.cover_url}" alt="">` : '') + `<h3>${escapeHtml(e.name || '')}</h3><div class="meta">${fmtDay(new Date(e.start_at))} · ${fmtTime(e.start_at)}${end}<br>${escapeHtml((e.presented_by && e.presented_by.name) || c.name || '')}${e.city ? ' · ' + escapeHtml(e.city) : (e.location_type === 'online' ? ' · online' : '')}${e.hosts.length ? '<br>' + hostAvatars(e) + 'Hosted by ' + escapeHtml(e.hosts.join(', ')) : ''}${e.going ? '<br>You are ' + escapeHtml(e.guest_status || 'registered') : ''}</div><a href="${e.url}" target="_blank" rel="noopener">Open on Luma ↗</a>`;
+  p.innerHTML = (e.cover_url ? `<img src="${imgUrl(e.cover_url, 340)}" alt="">` : '') + `<h3>${escapeHtml(e.name || '')}</h3><div class="meta">${fmtDay(new Date(e.start_at))} · ${fmtTime(e.start_at)}${end}<br>${escapeHtml((e.presented_by && e.presented_by.name) || c.name || '')}${e.city ? ' · ' + escapeHtml(e.city) : (e.location_type === 'online' ? ' · online' : '')}${e.hosts.length ? '<br>' + hostAvatars(e) + 'Hosted by ' + escapeHtml(e.hosts.join(', ')) : ''}${e.going ? '<br>You are ' + escapeHtml(e.guest_status || 'registered') : ''}</div><a href="${e.url}" target="_blank" rel="noopener">Open on Luma ↗</a>`;
   p.hidden = false;
   // Measure the real popover, then open it below the tap if it fits, otherwise above it.
   const w = p.offsetWidth, h = p.offsetHeight;
@@ -309,7 +327,7 @@ function renderManual(list) {
   const ul = $('#luma-manual'); ul.innerHTML = '';
   list.forEach(c => {
     const li = document.createElement('li');
-    li.innerHTML = (c.avatar_url ? `<img src="${c.avatar_url}" alt="">` : '') + `<span>${escapeHtml(c.name)}</span><button title="remove">✕</button>`;
+    li.innerHTML = (c.avatar_url ? `<img src="${imgUrl(c.avatar_url, 18)}" alt="" loading="lazy">` : '') + `<span>${escapeHtml(c.name)}</span><button title="remove">✕</button>`;
     li.querySelector('button').onclick = async () => { await api('api/luma/calendars/remove', { api_id: c.api_id }); load(); };
     ul.appendChild(li);
   });
