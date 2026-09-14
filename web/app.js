@@ -172,7 +172,9 @@ function dayCard(e) {
   const avs = [pb.avatar_url, ...people.slice(0, 2).map(h => h.a)].filter(Boolean).map(u => `<img class="av" src="${u}" alt="" loading="lazy">`).join('');
   const names = [pb.name, ...people.slice(0, 2).map(h => h.n)].filter(Boolean).join(' · ') + (people.length > 2 ? ` +${people.length - 2}` : '');
   const hostLine = `<div class="hosts">${avs}<span>${escapeHtml(names)}</span></div>`;
-  card.innerHTML = (e.cover_url ? `<img src="${e.cover_url}" alt="" loading="lazy">` : '<div class="noimg"></div>') +
+  const fallbackAv = pb.avatar_url || c.avatar_url || '';
+  const placeholder = `<div class="noimg">${fallbackAv ? `<img class="ph" src="${fallbackAv}" alt="">` : ''}</div>`;
+  card.innerHTML = (e.cover_url ? `<img src="${e.cover_url}" alt="" loading="lazy" onerror="this.outerHTML=this.dataset.ph" data-ph="${escapeHtml(placeholder)}">` : placeholder) +
     `<div class="body">${hostLine}<div class="when">${e.all_day ? 'All day' : fmtTime(e.start_at) + end}</div>` +
     `<div class="title">${e.going ? '✓ ' : ''}${escapeHtml(e.name || '')}</div>` +
     (where ? `<div class="meta">${where}</div>` : '') + `</div>`;

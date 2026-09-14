@@ -72,7 +72,7 @@ main { padding:16px; }
 #list .empty { color:var(--muted); padding:20px 0; }
 [hidden] { display:none !important; }
 select { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:5px 8px; font:inherit; }
-#list.day-mode { display:grid; grid-template-columns:1fr; gap:12px; }
+#list.day-mode { display:grid; grid-template-columns:1fr; gap:12px; align-content:start; }
 .card { display:grid; grid-template-columns:120px 1fr; background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--c,var(--accent)); border-radius:10px; overflow:hidden; cursor:pointer; }
 .card > img, .card .noimg { width:120px; height:120px; object-fit:cover; background:color-mix(in srgb, var(--c,var(--accent)) 18%, var(--panel)); }
 .card .body { padding:10px 12px; min-width:0; }
@@ -88,6 +88,9 @@ select { background:var(--panel); color:var(--fg); border:1px solid var(--line);
 .card .hosts .av + .av { margin-left:-10px; }
 .card .hosts span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #list.list-mode .dayhead { font-size:15px; margin:20px 0 8px; position:sticky; top:58px; background:var(--bg); padding:4px 0; z-index:1; }
-#list.list-mode .cards { display:grid; grid-template-columns:1fr; gap:12px; }
+#list.list-mode .cards { display:grid; grid-template-columns:1fr; gap:12px; align-content:start; }
+#list, #grid { align-self:start; }
 /* Two columns on wide screens; grid order runs left, right, left, right, so time order reads row by row. */
 @media (min-width:760px) { #list.day-mode, #list.list-mode .cards { grid-template-columns:1fr 1fr; } }
+.card .noimg { display:flex; align-items:center; justify-content:center; }
+.card .noimg .ph { width:56px; height:56px; border-radius:50%; object-fit:cover; opacity:.9; }

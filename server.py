@@ -531,6 +531,21 @@ def find_partiful_events(obj, out):
             find_partiful_events(v, out)
 
 
+def _image_url(v):
+    """Partiful image fields are either a URL or an object with url / upload.url / poster.url inside."""
+    if isinstance(v, str):
+        return v or None
+    if isinstance(v, dict):
+        for k in ("url",):
+            if isinstance(v.get(k), str) and v[k]:
+                return v[k]
+        for k in ("upload", "poster", "image"):
+            u = _image_url(v.get(k))
+            if u:
+                return u
+    return None
+
+
 def normalize_partiful_event(ev, cal_id, going):
     evid = str(_first(ev, "id", "eventId", "slug"))
     start = _iso(_first(ev, "startDate", "startTime", "start_date", "start", "date"))
@@ -548,13 +563,18 @@ def normalize_partiful_event(ev, cal_id, going):
             if name:
                 hosts.append(name)
                 host_avatars.append((_first(h, "avatarUrl", "profileImageUrl", "photoUrl", "imageUrl", "photoURL") if isinstance(h, dict) else "") or "")
-    status = str(_first(ev, "rsvpStatus", "status", "myStatus", "guestStatus") or "").lower()
-    if status in ("going", "yes", "approved", "host", "hosting", "maybe"):
+    guest = ev.get("guest") if isinstance(ev.get("guest"), dict) else {}
+    status = str(_first(guest, "status") or _first(ev, "rsvpStatus", "myStatus", "guestStatus") or "").lower()
+    if status in ("going", "yes", "approved", "host", "hosting"):
         going = True
+    elif status in ("maybe", "pending", "seen", "invited", "waitlist", "declined", "no"):
+        going = False
+    if ev.get("hostName") and not hosts:
+        hosts, host_avatars = [ev["hostName"]], [""]
     return {
         "api_id": "pf-" + evid, "name": _first(ev, "title", "name"), "url": "https://partiful.com/e/" + evid,
         "start_at": start, "end_at": end, "timezone": _first(ev, "timezone", "timeZone"), "all_day": False,
-        "cover_url": _first(ev, "imageUrl", "image", "coverImageUrl", "posterUrl"),
+        "cover_url": _image_url(_first(ev, "imageUrl", "image", "coverImageUrl", "posterUrl", "poster")),
         "location_type": "offline" if loc else "unknown", "city": loc if isinstance(loc, str) else None,
         "hosts": hosts, "host_avatars": host_avatars, "calendar_api_id": cal_id, "going": going, "guest_status": status or None, "source": "partiful",
     }
