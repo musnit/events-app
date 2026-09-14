@@ -1,6 +1,6 @@
 // Luma followed-calendars view. Talks to the local server with relative URLs so it works under /luma/.
 const $ = (s) => document.querySelector(s);
-const state = { data: null, month: startOfMonth(new Date()), day: new Date(), hidden: new Set(), goingOnly: false, area: localStorage.getItem('area') || 'bay', view: 'grid', email: '' };
+const state = { data: null, month: startOfMonth(new Date()), day: new Date(), hidden: new Set(), goingOnly: false, area: localStorage.getItem('area') || 'bay', view: 'day', email: '' };
 const PALETTE = ['#7c9cff','#ff8a65','#4dd0a1','#ffca4d','#c884ff','#4fc3f7','#f06292','#a5d66f','#ffab40','#80cbc4','#b39ddb','#e57373'];
 
 function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
@@ -123,7 +123,7 @@ $('#no-cals').onclick = () => { state.data.calendars.forEach(c => state.hidden.a
 $('#going-only').onchange = (e) => { state.goingOnly = e.target.checked; renderMain(); };
 $('#area').value = state.area;
 $('#area').onchange = (e) => { state.area = e.target.value; localStorage.setItem('area', state.area); renderSidebar(); renderMain(); };
-function setView(v) { state.view = v; localStorage.setItem('view', v); ['day','grid','list'].forEach(x => $('#view-' + x).classList.toggle('on', x === v)); renderMain(); }
+function setView(v) { state.view = v; ['day','grid','list'].forEach(x => $('#view-' + x).classList.toggle('on', x === v)); renderMain(); }
 $('#view-grid').onclick = () => { state.month = startOfMonth(new Date()); setView('grid'); };
 $('#view-list').onclick = () => { state.month = startOfMonth(new Date()); setView('list'); };
 $('#view-day').onclick = () => { state.day = new Date(); setView('day'); };
@@ -336,7 +336,9 @@ async function handleImportHash() {
   return true;
 }
 
-const initialView = new URLSearchParams(location.search).get('view') || localStorage.getItem('view');
-if (['day','grid','list'].includes(initialView)) { state.view = initialView; ['day','grid','list'].forEach(x => $('#view-' + x).classList.toggle('on', x === initialView)); }
+// Every load opens on Today; ?view=month or ?view=list overrides it.
+const initialView = new URLSearchParams(location.search).get('view') || 'day';
+state.view = ['day','grid','list'].includes(initialView) ? initialView : 'day';
+['day','grid','list'].forEach(x => $('#view-' + x).classList.toggle('on', x === state.view));
 handleImportHash().then(done => { if (!done) load(); });
 setInterval(() => { if (state.data?.signed_in && document.visibilityState === 'visible') load(); }, 5 * 60 * 1000);
