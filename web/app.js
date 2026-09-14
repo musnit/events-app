@@ -85,7 +85,7 @@ function render(s) {
   $('#pf-disconnect').hidden = !s.partiful_connected;
   if (!showApp) return;
   // Colour by source, not per calendar: per-calendar colours carry no meaning with 100+ calendars.
-  const SOURCE_COLORS = { luma: PALETTE[0], partiful: '#ff5c8a' };
+  const SOURCE_COLORS = { luma: PALETTE[0], partiful: '#ff5c8a', agihouse: '#2dd4bf' };
   s.calendars.forEach(c => { c.color = SOURCE_COLORS[c.source] || PALETTE[0]; });
   renderSidebar();
   renderMain();

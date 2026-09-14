@@ -279,6 +279,62 @@ def fetch_luma_ics(url):
     return out
 
 
+# ---------- agi house (public JSON behind agihouse.org/events) ----------
+
+AGIHOUSE_API = "https://jtwthn6xog.execute-api.us-east-1.amazonaws.com/events"
+AGIHOUSE_CAL = {"api_id": "agihouse", "name": "AGI House", "slug": None, "avatar_url": "https://www.agihouse.org/og-logo.png",
+                "tint_color": "#2dd4bf", "url": "https://www.agihouse.org/events", "source": "agihouse"}
+
+
+def fetch_agihouse():
+    req = urllib.request.Request(AGIHOUSE_API, headers={"user-agent": UA, "accept": "application/json", "origin": "https://www.agihouse.org"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        payload = json.loads(r.read())
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    out = []
+    for ev in payload.get("events") or []:
+        if ev.get("status") not in (None, "published") or ev.get("privacy") not in (None, "public") or ev.get("dateTbd"):
+            continue
+        start = _iso(ev.get("startTime"))
+        if not start or start < cutoff:
+            continue
+        loc = ev.get("location") or {}
+        city = loc.get("city") or ""
+        address = ", ".join(x for x in (loc.get("name"), loc.get("address"), city) if x)
+        out.append({
+            "api_id": "agi-" + str(ev.get("slug") or ev.get("id")), "name": ev.get("title"),
+            "url": "https://www.agihouse.org/events/" + urllib.parse.quote(str(ev.get("slug") or "")),
+            "start_at": start, "end_at": _iso(ev.get("endTime")), "timezone": ev.get("timezone"), "all_day": False,
+            "cover_url": ev.get("coverImageUrl"),
+            "location_type": "online" if loc.get("isVirtual") else "offline",
+            "city": re.sub(r",?\s*CA\b.*$", "", city).strip() or None, "region": "CA" if re.search(r"\bCA\b", city) else None,
+            "country": None, "address": address or None, "hosts": [], "host_avatars": [],
+            "calendar_api_id": "agihouse", "going": False, "guest_status": None, "source": "agihouse",
+            "presented_by": {"api_id": "agihouse", "name": "AGI House", "avatar_url": AGIHOUSE_CAL["avatar_url"]},
+            "kind": ev.get("type"),
+        })
+    return out
+
+
+def title_key(name):
+    return re.sub(r"[^a-z0-9 ]", "", (name or "").lower()).split()
+
+
+def is_duplicate(ev, others):
+    """True when another source already has this event: same day and clearly the same title."""
+    a = set(title_key(ev["name"]))
+    if not a:
+        return False
+    day = (ev.get("start_at") or "")[:10]
+    for o in others:
+        if (o.get("start_at") or "")[:10] != day:
+            continue
+        b = set(title_key(o["name"]))
+        if b and len(a & b) / len(a | b) >= 0.6:
+            return True
+    return False
+
+
 # ---------- partiful ----------
 
 def load_partiful():
@@ -537,7 +593,7 @@ def fetch_partiful_api(errors):
 # ---------- area classification ----------
 
 BAY_BBOX = (36.85, 38.60, -123.15, -121.15)  # lat_min, lat_max, lng_min, lng_max: SF Bay Area incl. Santa Cruz/Napa edges
-BAY_CITIES = {"san francisco", "oakland", "berkeley", "emeryville", "alameda", "san jose", "palo alto", "menlo park",
+BAY_CITIES = {"san francisco", "hillsborough", "oakland", "berkeley", "emeryville", "alameda", "san jose", "palo alto", "menlo park",
               "mountain view", "sunnyvale", "santa clara", "cupertino", "redwood city", "san mateo", "south san francisco",
               "daly city", "burlingame", "millbrae", "foster city", "belmont", "san carlos", "los altos", "los gatos",
               "campbell", "milpitas", "fremont", "hayward", "union city", "newark", "san leandro", "richmond", "el cerrito",
@@ -789,6 +845,17 @@ def refresh(force=False):
                 data["errors"].append(f"Partiful: {e}")
                 data["calendars"] += [c for c in old.get("calendars", []) if c.get("source") == "partiful"]
                 data["events"] += [e2 for e2 in old.get("events", []) if e2.get("source") == "partiful"]
+        try:
+            agi = [e2 for e2 in fetch_agihouse() if not is_duplicate(e2, data["events"])]
+            data["calendars"].append(dict(AGIHOUSE_CAL))
+            data["events"] += agi
+            log(f"agihouse: {len(agi)} events after dedupe")
+        except Exception as e:
+            log("agihouse failed:", repr(e))
+            data["errors"].append(f"AGI House: {e}")
+            data["events"] += [e2 for e2 in old.get("events", []) if e2.get("source") == "agihouse"]
+            if any(c.get("source") == "agihouse" for c in old.get("calendars", [])):
+                data["calendars"].append(dict(AGIHOUSE_CAL))
         for ev in data["events"]:
             if not ev.get("area"):
                 ev["area"] = classify_area(ev)
