@@ -72,9 +72,7 @@ main { padding:16px; }
 #list .empty { color:var(--muted); padding:20px 0; }
 [hidden] { display:none !important; }
 select { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:5px 8px; font:inherit; }
-#list.day-mode { columns:1; column-gap:12px; }
-#list.day-mode .card { break-inside:avoid; margin-bottom:12px; }
-@media (min-width:760px) { #list.day-mode { columns:2; } }
+#list.day-mode { display:flex; flex-direction:column; gap:12px; }
 .card { display:grid; grid-template-columns:120px 1fr; background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--c,var(--accent)); border-radius:10px; overflow:hidden; cursor:pointer; }
 .card > img, .card .noimg { width:120px; height:120px; object-fit:cover; background:color-mix(in srgb, var(--c,var(--accent)) 18%, var(--panel)); }
 .card .body { padding:10px 12px; min-width:0; }
@@ -90,6 +88,6 @@ select { background:var(--panel); color:var(--fg); border:1px solid var(--line);
 .card .hosts .av + .av { margin-left:-10px; }
 .card .hosts span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #list.list-mode .dayhead { font-size:15px; margin:20px 0 8px; position:sticky; top:58px; background:var(--bg); padding:4px 0; z-index:1; }
-#list.list-mode .cards { columns:1; column-gap:12px; }
-#list.list-mode .cards .card { break-inside:avoid; margin-bottom:12px; }
-@media (min-width:760px) { #list.list-mode .cards { columns:2; } }
+#list.list-mode .cards { display:flex; flex-direction:column; gap:12px; }
+#list.day-mode, #list.list-mode { max-width:820px; }
+@media (min-width:900px) { .card { grid-template-columns:160px 1fr; } .card > img, .card .noimg { width:160px; height:160px; } .card .title { font-size:17px; } }
