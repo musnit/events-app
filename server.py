@@ -565,14 +565,11 @@ def normalize_partiful_event(ev, cal_id, going):
                 host_avatars.append((_first(h, "avatarUrl", "profileImageUrl", "photoUrl", "imageUrl", "photoURL") if isinstance(h, dict) else "") or "")
     guest = ev.get("guest") if isinstance(ev.get("guest"), dict) else {}
     status = str(_first(guest, "status") or _first(ev, "rsvpStatus", "myStatus", "guestStatus") or "").lower()
-    if status in ("going", "yes", "approved", "host", "hosting"):
-        going = True
-    elif status in ("maybe", "pending", "seen", "invited", "waitlist", "declined", "no"):
-        going = False
+    going = status in ("going", "yes", "approved", "host", "hosting")
     if ev.get("hostName") and not hosts:
         hosts, host_avatars = [ev["hostName"]], [""]
     return {
-        "api_id": "pf-" + evid, "name": _first(ev, "title", "name"), "url": "https://partiful.com/e/" + evid,
+        "api_id": "pf-" + evid, "name": " ".join(str(_first(ev, "title", "name") or "").split()), "url": "https://partiful.com/e/" + evid,
         "start_at": start, "end_at": end, "timezone": _first(ev, "timezone", "timeZone"), "all_day": False,
         "cover_url": _image_url(_first(ev, "imageUrl", "image", "coverImageUrl", "posterUrl", "poster")),
         "location_type": "offline" if loc else "unknown", "city": loc if isinstance(loc, str) else None,
