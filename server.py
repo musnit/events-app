@@ -536,10 +536,17 @@ def _image_url(v):
     if isinstance(v, str):
         return v or None
     if isinstance(v, dict):
+        # Uploads live in a private Firebase bucket (403 to browsers); partiful.com serves them via imgix by path.
+        up = v.get("upload") if isinstance(v.get("upload"), dict) else None
+        if up and up.get("path"):
+            return "https://partiful.imgix.net/" + urllib.parse.quote(up["path"]) + "?w=800&h=800&fit=clip"
+        po = v.get("poster") if isinstance(v.get("poster"), dict) else None
+        if po and po.get("name"):
+            return "https://partiful-posters.imgix.net/" + urllib.parse.quote(po["name"]) + "?fit=max&w=800&h=800"
         for k in ("url",):
-            if isinstance(v.get(k), str) and v[k]:
+            if isinstance(v.get(k), str) and v[k] and "firebasestorage" not in v[k]:
                 return v[k]
-        for k in ("upload", "poster", "image"):
+        for k in ("poster", "image"):
             u = _image_url(v.get(k))
             if u:
                 return u
