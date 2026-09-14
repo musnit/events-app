@@ -119,13 +119,27 @@ def luma(path, params=None, body=None, session_key=None):
         raise LumaError(e.code, msg)
 
 
+def luma_retry(path, params=None, session_key=None, tries=4):
+    """Like luma(), but backs off and retries when Luma rate-limits us (429)."""
+    delay = 45
+    for attempt in range(tries):
+        try:
+            return luma(path, params, session_key=session_key)
+        except LumaError as e:
+            if e.status != 429 or attempt == tries - 1:
+                raise
+            log(f"luma 429 on {path}; waiting {delay}s")
+            time.sleep(delay)
+            delay = min(delay * 2, 240)
+
+
 def luma_paginated(path, params, session_key, max_pages=20):
     out, cursor = [], None
     for _ in range(max_pages):
         p = dict(params, pagination_limit=50)
         if cursor:
             p["pagination_cursor"] = cursor
-        res, _ = luma(path, p, session_key=session_key)
+        res, _ = luma_retry(path, p, session_key=session_key)
         out.extend(res.get("entries") or [])
         if not res.get("has_more") or not res.get("next_cursor"):
             break
@@ -755,18 +769,23 @@ def fetch_all(session_key, errors_out=None):
 
     events = {}
     errors = []
+    previous = (load_cache() or {}).get("events", [])
     for cal in calendars:
         try:
             entries = luma_paginated("/calendar/get-items", {"calendar_api_id": cal["api_id"], "period": "future"}, session_key)
         except LumaError as e:
-            errors.append(f"{cal['name']}: {e}")
+            errors.append(f"{cal['name']}: {e.body}")
+            # Keep what we had for this calendar rather than blanking it until the next successful pull.
+            for ev in previous:
+                if ev.get("calendar_api_id") == cal["api_id"] and ev.get("source") == "luma":
+                    events.setdefault(ev["api_id"], ev)
             continue
         for en in entries:
             ev = normalize_event(en, cal["api_id"])
             if ev:
                 ev["calendar_api_id"] = cal["api_id"]
                 events[ev["api_id"]] = ev
-        time.sleep(0.15)
+        time.sleep(0.4)
 
     # Events the user registered for, whether or not they come from a followed calendar.
     mine = []
