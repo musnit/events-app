@@ -150,7 +150,7 @@ function renderDay() {
   const l = $('#list'); l.innerHTML = '';
   const evs = (groupByDay(visibleEvents())[dayKey(state.day)] || []).sort((a, b) => a.start_at.localeCompare(b.start_at));
   if (!evs.length) { l.innerHTML = '<p class="empty">Nothing on this day from the calendars you have turned on.</p>'; return; }
-  l.classList.add('day-mode');
+  l.classList.remove('list-mode'); l.classList.add('day-mode');
   evs.forEach(e => l.appendChild(dayCard(e)));
 }
 
@@ -226,13 +226,15 @@ function renderGrid() {
 }
 
 function renderList() {
-  const l = $('#list'); l.innerHTML = ''; l.classList.remove('day-mode');
+  const l = $('#list'); l.innerHTML = ''; l.classList.remove('day-mode'); l.classList.add('list-mode');
   const by = groupByDay(visibleEvents());
   const keys = Object.keys(by).sort().filter(k => k.startsWith(`${state.month.getFullYear()}-${String(state.month.getMonth()+1).padStart(2,'0')}`));
-  if (!keys.length) l.innerHTML = '<p class="msg">No events this month.</p>';
+  if (!keys.length) l.innerHTML = '<p class="empty">No events this month.</p>';
   keys.forEach(k => {
     const h = document.createElement('div'); h.className = 'dayhead'; h.id = 'd-' + k; h.textContent = fmtDay(new Date(k + 'T12:00:00')); l.appendChild(h);
-    by[k].sort((a, b) => a.start_at.localeCompare(b.start_at)).forEach(e => l.appendChild(listRow(e)));
+    const wrap = document.createElement('div'); wrap.className = 'cards';
+    by[k].sort((a, b) => a.start_at.localeCompare(b.start_at)).forEach(e => wrap.appendChild(dayCard(e)));
+    l.appendChild(wrap);
   });
 }
 

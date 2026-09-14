@@ -89,3 +89,7 @@ select { background:var(--panel); color:var(--fg); border:1px solid var(--line);
 .card .hosts .av { width:28px; height:28px; margin-right:0; }
 .card .hosts .av + .av { margin-left:-10px; }
 .card .hosts span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#list.list-mode .dayhead { font-size:15px; margin:20px 0 8px; position:sticky; top:58px; background:var(--bg); padding:4px 0; z-index:1; }
+#list.list-mode .cards { columns:1; column-gap:12px; }
+#list.list-mode .cards .card { break-inside:avoid; margin-bottom:12px; }
+@media (min-width:760px) { #list.list-mode .cards { columns:2; } }
