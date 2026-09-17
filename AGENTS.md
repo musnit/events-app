@@ -14,6 +14,7 @@ API at all, but each account gets a personal iCalendar feed, which we poll.
 - `cache.json` (gitignored) — last successful pull. `feed.ics` is generated from it so the
   merged view can be subscribed to from Google/Apple Calendar.
 - `.session.json` (gitignored, 0600) — Luma session key + email. `.partiful.json` — feed URL.
+  `.partiful_auth.json` (0600) holds `{"accounts": [...]}`, one Firebase refresh token per connected Partiful account. The old single-login object still reads as one account.
 
 ## How Luma sources are configured (phone-friendly first)
 

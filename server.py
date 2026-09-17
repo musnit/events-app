@@ -5,6 +5,7 @@ Luma's public API only covers calendars you manage, so this server signs in the 
 luma.com frontend does (email code) and then reads the same internal endpoints the site uses.
 It binds to 127.0.0.1 and expects nginx to strip a /luma/ prefix and handle auth (Authelia).
 """
+import base64
 import json
 import re
 import os
@@ -464,11 +465,43 @@ def fetch_partiful(url):
 
 # ---------- partiful api (firebase callables, same ones partiful.com uses) ----------
 
-def partiful_id_token():
-    """Return a valid Firebase ID token for the stored Partiful login, refreshing it when needed."""
-    auth = load_json(PARTIFUL_AUTH_FILE)
-    if not auth:
-        return None
+def load_partiful_accounts():
+    """Return the stored Partiful logins. Older installs kept a single login object, which reads as a one-item list."""
+    data = load_json(PARTIFUL_AUTH_FILE)
+    if isinstance(data, dict) and "accounts" not in data:
+        return [data] if data.get("refresh_token") else []
+    return (data or {}).get("accounts", [])
+
+
+def save_partiful_account(auth):
+    """Add or update one login, matched by Partiful user id."""
+    accounts = [a for a in load_partiful_accounts() if a.get("uid") != auth.get("uid")]
+    accounts.append(auth)
+    save_json(PARTIFUL_AUTH_FILE, {"accounts": accounts})
+
+
+def remove_partiful_account(uid=None):
+    """Remove one login, or every login when uid is None."""
+    accounts = [a for a in load_partiful_accounts() if uid is not None and a.get("uid") != uid]
+    if accounts:
+        save_json(PARTIFUL_AUTH_FILE, {"accounts": accounts})
+    else:
+        try:
+            os.remove(PARTIFUL_AUTH_FILE)
+        except OSError:
+            pass
+
+
+def _jwt_claims(token):
+    try:
+        part = token.split(".")[1]
+        return json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
+    except (IndexError, ValueError):
+        return {}
+
+
+def partiful_id_token(auth):
+    """Return a valid Firebase ID token for one stored Partiful login, refreshing and saving it when needed."""
     if auth.get("id_token") and auth.get("expires_at", 0) > time.time() + 60:
         return auth["id_token"]
     req = urllib.request.Request(
@@ -480,21 +513,20 @@ def partiful_id_token():
             tok = json.loads(r.read())
     except urllib.error.HTTPError as e:
         body = e.read().decode(errors="replace")
-        if "INVALID_REFRESH_TOKEN" in body or "TOKEN_EXPIRED" in body or "USER_DISABLED" in body:
-            os.remove(PARTIFUL_AUTH_FILE)
+        if auth.get("uid") and ("INVALID_REFRESH_TOKEN" in body or "TOKEN_EXPIRED" in body or "USER_DISABLED" in body):
+            remove_partiful_account(auth["uid"])
         raise ValueError(f"Partiful login expired ({e.code})")
+    claims = _jwt_claims(tok["id_token"])
     auth.update({"id_token": tok["id_token"], "refresh_token": tok.get("refresh_token", auth["refresh_token"]),
-                 "uid": tok.get("user_id", auth.get("uid")), "expires_at": time.time() + int(tok.get("expires_in", 3600))})
-    save_json(PARTIFUL_AUTH_FILE, auth)
+                 "uid": tok.get("user_id", auth.get("uid")), "name": claims.get("name") or auth.get("name"),
+                 "expires_at": time.time() + int(tok.get("expires_in", 3600))})
+    save_partiful_account(auth)
     return auth["id_token"]
 
 
-def partiful_call(name, params=None):
-    token = partiful_id_token()
-    if not token:
-        raise ValueError("no Partiful login")
-    uid = (load_json(PARTIFUL_AUTH_FILE) or {}).get("uid")
-    body = {"data": {"params": params or {}, "userId": uid}}
+def partiful_call(auth, name, params=None):
+    token = partiful_id_token(auth)
+    body = {"data": {"params": params or {}, "userId": auth.get("uid")}}
     req = urllib.request.Request(PARTIFUL_API + "/" + name, data=json.dumps(body).encode(), method="POST", headers={
         "content-type": "application/json", "authorization": "Bearer " + token, "origin": "https://partiful.com",
         "referer": "https://partiful.com/", "user-agent": UA})
@@ -601,15 +633,17 @@ def normalize_partiful_event(ev, cal_id, going):
 
 
 def fetch_partiful_api(errors):
-    """Events from people/orgs the user follows plus their own upcoming events, via Partiful's callables."""
+    """Events from people/orgs each connected account follows plus its own upcoming events, via Partiful's callables."""
     events, calendars, debug = {}, [], {}
-    for fn, cal, going in (("getMyFollowedEvents", PARTIFUL_FOLLOW_CAL, False), ("getMyUpcomingEventsForHomePage", PARTIFUL_CAL, True)):
+    for auth, (fn, cal, going) in ((a, c) for a in load_partiful_accounts() for c in (
+            ("getMyFollowedEvents", PARTIFUL_FOLLOW_CAL, False), ("getMyUpcomingEventsForHomePage", PARTIFUL_CAL, True))):
+        who = auth.get("name") or auth.get("uid")
         try:
-            res = partiful_call(fn)
+            res = partiful_call(auth, fn)
         except Exception as e:
-            errors.append(f"Partiful {fn}: {e}")
+            errors.append(f"Partiful {fn} ({who}): {e}")
             continue
-        debug[fn] = res
+        debug.setdefault(auth.get("uid"), {})[fn] = res
         found = []
         find_partiful_events(res, found)
         cutoff = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
@@ -623,7 +657,7 @@ def fetch_partiful_api(errors):
             else:
                 events[ev["api_id"]] = ev
                 n += 1
-        log(f"partiful {fn}: {len(found)} event-like objects, {n} upcoming")
+        log(f"partiful {fn} ({who}): {len(found)} event-like objects, {n} upcoming")
         if all(c["api_id"] != cal["api_id"] for c in calendars):
             calendars.append(dict(cal))
     save_json(PARTIFUL_DEBUG_FILE, debug)
@@ -844,7 +878,7 @@ def load_cache():
 
 def refresh(force=False, spacing=CALENDAR_SPACING):
     sess, pf = load_session(), load_partiful()
-    pf_auth = load_json(PARTIFUL_AUTH_FILE)
+    pf_auth = load_partiful_accounts()
     if not sess and not pf and not pf_auth and not load_json(LUMA_CALS_FILE) and not load_json(LUMA_ICS_FILE):
         return
     with lock:
@@ -993,11 +1027,13 @@ class Handler(BaseHTTPRequestHandler):
             data = load_cache() or {}
             manual = load_json(LUMA_CALS_FILE, [])
             ics_cfg = load_json(LUMA_ICS_FILE)
-            pf_auth = load_json(PARTIFUL_AUTH_FILE)
+            pf_auth = load_partiful_accounts()
             configured = bool(sess) or bool(pf) or bool(manual) or bool(ics_cfg) or bool(pf_auth)
             return self.send_json({"signed_in": configured, "luma_signed_in": bool(sess), "luma_manual": manual,
                                    "luma_ics_url": (ics_cfg or {}).get("url"),
                                    "email": (sess or {}).get("email"), "partiful_url": (pf or {}).get("url"), "partiful_connected": bool(pf_auth),
+                                   "partiful_accounts": [{"uid": a.get("uid"), "name": a.get("name") or _jwt_claims(a.get("id_token") or "").get("name")}
+                                                         for a in pf_auth],
                                    "refreshing": state["refreshing"], "last_error": state["last_error"],
                                    "fetched_at": data.get("fetched_at"), "calendars": data.get("calendars", []),
                                    "events": data.get("events", []), "errors": data.get("errors", [])})
@@ -1119,18 +1155,15 @@ class Handler(BaseHTTPRequestHandler):
                 rt = (payload.get("refresh_token") or "").strip()
                 if not rt:
                     return self.send_json({"error": "no Partiful login in that payload"}, 400)
-                save_json(PARTIFUL_AUTH_FILE, {"refresh_token": rt, "uid": payload.get("uid"), "id_token": None, "expires_at": 0})
+                auth = {"refresh_token": rt, "uid": payload.get("uid"), "id_token": None, "expires_at": 0}
                 try:
-                    partiful_id_token()
+                    partiful_id_token(auth)
                 except Exception as e:
                     return self.send_json({"error": str(e)}, 400)
                 threading.Thread(target=refresh, daemon=True).start()
                 return self.send_json({"ok": True})
             if path == "/api/partiful/disconnect":
-                try:
-                    os.remove(PARTIFUL_AUTH_FILE)
-                except OSError:
-                    pass
+                remove_partiful_account(body.get("uid"))
                 threading.Thread(target=refresh, daemon=True).start()
                 return self.send_json({"ok": True})
             if path == "/api/partiful":

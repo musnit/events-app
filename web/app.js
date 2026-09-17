@@ -82,8 +82,8 @@ function render(s) {
   if (s.partiful_url && !$('#partiful-url').value) $('#partiful-url').value = s.partiful_url;
   if (s.luma_ics_url && !$('#luma-ics-url').value) $('#luma-ics-url').value = s.luma_ics_url;
   renderManual(s.luma_manual || []);
-  $('#pf-status').textContent = s.partiful_connected ? 'Partiful is connected; following and your own events sync automatically.' : '';
-  $('#pf-disconnect').hidden = !s.partiful_connected;
+  $('#pf-status').textContent = s.partiful_connected ? 'These Partiful accounts are connected. Events from people each one follows, and each one\'s own events, sync automatically. Run the bookmark again while signed in to another account to add it.' : '';
+  renderPartifulAccounts(s.partiful_accounts || []);
   if (!showApp) return;
   // Colour by source, not per calendar: per-calendar colours carry no meaning with 100+ calendars.
   const SOURCE_COLORS = { luma: PALETTE[0], partiful: '#ff5c8a', agihouse: '#2dd4bf' };
@@ -290,7 +290,6 @@ async function copyPfBookmarklet() {
 }
 $('#copy-pf-bookmarklet').onclick = copyPfBookmarklet;
 $('#pf-bookmarklet').onclick = (e) => { e.preventDefault(); copyPfBookmarklet(); };
-$('#pf-disconnect').onclick = async () => { await api('api/partiful/disconnect', {}); load(); };
 $('#bookmarklet').onclick = (e) => { e.preventDefault(); copyBookmarklet(); };
 async function copyBookmarklet() {
   try { await navigator.clipboard.writeText(BOOKMARKLET); $('#copy-bookmarklet').textContent = 'Copied ✓'; $('#import-msg').textContent = 'Copied. Now follow the steps below.'; }
@@ -329,6 +328,16 @@ function renderManual(list) {
     const li = document.createElement('li');
     li.innerHTML = (c.avatar_url ? `<img src="${imgUrl(c.avatar_url, 18)}" alt="" loading="lazy">` : '') + `<span>${escapeHtml(c.name)}</span><button title="remove">✕</button>`;
     li.querySelector('button').onclick = async () => { await api('api/luma/calendars/remove', { api_id: c.api_id }); load(); };
+    ul.appendChild(li);
+  });
+}
+
+function renderPartifulAccounts(list) {
+  const ul = $('#pf-accounts'); ul.innerHTML = '';
+  list.forEach(a => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${escapeHtml(a.name || a.uid)}</span><button title="disconnect">✕</button>`;
+    li.querySelector('button').onclick = async () => { await api('api/partiful/disconnect', { uid: a.uid }); load(); };
     ul.appendChild(li);
   });
 }

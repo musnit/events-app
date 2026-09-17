@@ -98,6 +98,7 @@
     <h2>Partiful</h2>
     <p>Same idea as Luma: a one-time bookmark tapped on partiful.com hands this app your Partiful login. It then reads the events from people and orgs you follow, plus your own upcoming events, and keeps them fresh on its own.</p>
     <p id="pf-status" class="msg"></p>
+    <ul id="pf-accounts" class="cal-chips"></ul>
     <ol class="steps" data-platform="ios" hidden>
       <li>Tap <b>Copy Partiful bookmarklet</b> below.</li>
       <li>Safari <b>Share</b> → <b>Add Bookmark</b> → Save, then Bookmarks → Edit → tap it → replace the <b>Address</b> with the copied text.</li>
@@ -113,7 +114,6 @@
     <div class="row-wrap">
       <button type="button" id="copy-pf-bookmarklet">Copy Partiful bookmarklet</button>
       <a id="pf-bookmarklet" href="#" data-platform="desktop" hidden>Import Partiful</a>
-      <button type="button" id="pf-disconnect" class="quiet" hidden>disconnect</button>
     </div>
     <textarea id="pf-bm-text" rows="3" readonly hidden></textarea>
     <p id="pf-import-msg" class="msg"></p>
