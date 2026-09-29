@@ -1,0 +1,303 @@
+{
+  "entries": [
+    {
+      "api_id": "calev-D5ZkR92psVwBUEG",
+      "calendar_api_id": "cal-oWJafai4qVBegex",
+      "start_at": "2026-09-30T02:00:00.000Z",
+      "platform": "luma",
+      "status": "approved",
+      "is_manager": false,
+      "submitted_by_user_api_id": "usr-G7vZaxGDooL5N3W",
+      "event": {
+        "api_id": "evt-zizE14OXoiWSD9q",
+        "calendar_api_id": "cal-oWJafai4qVBegex",
+        "cover_url": "https://images.lumacdn.com/uploads/y3/9450ca8e-cbfa-4552-95d5-b265da0d2f3e.png",
+        "end_at": "2026-09-30T04:00:00.000Z",
+        "event_type": "independent",
+        "hide_rsvp": false,
+        "location_type": "offline",
+        "name": "Sex, AI and the Future of Human Intimacy",
+        "one_to_one": true,
+        "recurrence_id": null,
+        "show_guest_list": true,
+        "social_image_url": "https://images.lumacdn.com/event-social/hf/8f4eafd9-c28c-4a77-970f-3098d31b9188.png",
+        "start_at": "2026-09-30T02:00:00.000Z",
+        "timezone": "America/Los_Angeles",
+        "url": "nmvb841b",
+        "user_api_id": "usr-G7vZaxGDooL5N3W",
+        "visibility": "public",
+        "virtual_info": {"has_access": false},
+        "geo_address_info": {
+          "city": "San Jose",
+          "type": "google",
+          "region": "California",
+          "address": "Era Lounge",
+          "country": "United States",
+          "place_id": "ChIJj69IvUXNj4ARH_jTJrTBNvI",
+          "localized": null,
+          "city_state": "San Jose, CA",
+          "description": "",
+          "sublocality": "Downtown San Jose",
+          "country_code": "US",
+          "full_address": "Era Lounge, 386 S 1st St, San Jose, CA 95113, USA",
+          "region_short": "CA",
+          "short_address": "386 S 1st St, San Jose",
+          "place_coordinate": {"latitude": 37.3303894, "longitude": -121.88601169999998},
+          "apple_maps_place_id": "I5EF7CB8639034193",
+          "mode": "shown"
+        },
+        "geo_address_visibility": "public",
+        "coordinate": {"longitude": -121.88601169999998, "latitude": 37.3303894},
+        "waitlist_enabled": false,
+        "waitlist_status": "disabled"
+      },
+      "cover_image": {
+        "colors": ["#d9a6c7", "#910022", "#161719", "#f2f3f5"],
+        "palette": {
+          "neutral": [{"color": "#161719", "percentage": 7.47}, {"color": "#f2f3f5", "percentage": 5.55}],
+          "vibrant": [{"color": "#910022", "percentage": 34.7}, {"color": "#d9a6c7", "percentage": 34.92}]
+        }
+      },
+      "calendar": {
+        "access_level": "public",
+        "api_id": "cal-oWJafai4qVBegex",
+        "avatar_url": "https://images.lumacdn.com/calendars/9i/454f12f2-420a-440b-b61e-cf2d4d2cd1be.jpg",
+        "coordinate": {"longitude": -122.41941550000001, "latitude": 37.7749295},
+        "cover_image_url": "https://images.lumacdn.com/calendar-cover-images/z0/1fc3d201-37d6-4313-9bf1-a14984faa376.jpg",
+        "description_short": "A lecture series hosted in The Bay's  coolest spaces.",
+        "end_date": null,
+        "event_submission_restriction": "open",
+        "is_blocked": false,
+        "is_verified": false,
+        "launch_status": "launched",
+        "location": {
+          "city": "San Francisco",
+          "region": "California",
+          "country": "United States",
+          "place_id": "ChIJIQBpAG2ahYAR_6128GcTUEo",
+          "timezone": "America/Los_Angeles",
+          "country_code": "US"
+        },
+        "luma_plan": "plus",
+        "luma_plus_active": true,
+        "name": "Big Brain Lectures - Bay Area",
+        "personal_user_api_id": null,
+        "slug": "Big-Brain-Bay",
+        "social_image_url": "https://images.lumacdn.com/calendar-cover-images/i6/aef3b4e9-4926-4803-bb6e-63b2056e7794.png",
+        "start_date": null,
+        "tint_color": "#7a0000",
+        "website": null,
+        "is_personal": false,
+        "personal_user": null,
+        "timezone": "America/Los_Angeles"
+      },
+      "hosts": [
+        {
+          "api_id": "usr-fixture00001",
+          "avatar_url": "https://images.lumacdn.com/avatars/fixture/jordan.jpg",
+          "bio_short": "Neuroscience nerd",
+          "first_name": "Jordan",
+          "last_name": "Rivera",
+          "instagram_handle": null,
+          "is_verified": false,
+          "linkedin_handle": null,
+          "name": "Jordan Rivera",
+          "timezone": "America/Los_Angeles",
+          "twitter_handle": null,
+          "username": null,
+          "website": null
+        },
+        {
+          "api_id": "usr-G7vZaxGDooL5N3W",
+          "avatar_url": "https://images.lumacdn.com/uploads/km/7cb7f9fa-cad5-45c4-be89-eadb403dbb01.jpg",
+          "bio_short": "",
+          "first_name": "",
+          "last_name": "",
+          "instagram_handle": "bigbrainbayarea",
+          "is_verified": false,
+          "linkedin_handle": null,
+          "name": "Big Brain Bay Area",
+          "timezone": "America/Los_Angeles",
+          "twitter_handle": null,
+          "username": null,
+          "website": null
+        }
+      ],
+      "guest_count": 103,
+      "ticket_count": 135,
+      "ticket_info": {
+        "price": {"cents": 2700, "currency": "usd", "is_flexible": false},
+        "is_free": false,
+        "max_price": null,
+        "is_sold_out": true,
+        "spots_remaining": 0,
+        "is_near_capacity": false,
+        "require_approval": false
+      },
+      "registration_availability": "sold-out",
+      "featured_guests": [
+        {
+          "api_id": "usr-fixture00002",
+          "avatar_url": "https://images.lumacdn.com/avatars/fixture/alex.jpg",
+          "bio_short": "Robotics and supply chains",
+          "first_name": "Alex",
+          "last_name": "Kim",
+          "name": "Alex Kim",
+          "website": null
+        }
+      ],
+      "guest_info": {"api_id": "gst-fixture00001", "approval_status": "approved"},
+      "host_info": null,
+      "manager_info": null,
+      "featured_city": null,
+      "waitlist_active": false,
+      "tags": [
+        {"api_id": "tag-WS0MqLFHrCdZLSO", "name": "All Ages", "color": "orange"},
+        {"api_id": "tag-NLZJiHxrYz5RR1d", "name": "San Jose", "color": "green"}
+      ]
+    },
+    {
+      "api_id": "calev-VyGU12rLDtTBaLW",
+      "calendar_api_id": "cal-oWJafai4qVBegex",
+      "start_at": "2026-10-08T02:00:00.000Z",
+      "platform": "luma",
+      "status": "approved",
+      "is_manager": false,
+      "submitted_by_user_api_id": "usr-G7vZaxGDooL5N3W",
+      "event": {
+        "api_id": "evt-SsB1o08jHtQhpsY",
+        "calendar_api_id": "cal-oWJafai4qVBegex",
+        "cover_url": "https://images.lumacdn.com/uploads/90/39be4701-df9a-425e-a66f-4c843601a777.png",
+        "end_at": "2026-10-08T04:00:00.000Z",
+        "event_type": "independent",
+        "hide_rsvp": false,
+        "location_type": "offline",
+        "name": "Why Chimpanzees Can’t Give Lectures: The Evolution of Human Speech",
+        "one_to_one": true,
+        "recurrence_id": null,
+        "show_guest_list": true,
+        "start_at": "2026-10-08T02:00:00.000Z",
+        "timezone": "America/Los_Angeles",
+        "url": "ccagmm3i",
+        "user_api_id": "usr-G7vZaxGDooL5N3W",
+        "visibility": "public",
+        "virtual_info": {"has_access": false},
+        "geo_address_info": {
+          "city": "San Francisco",
+          "type": "google",
+          "region": "California",
+          "address": "500 Divisadero St",
+          "country": "United States",
+          "place_id": "ChIJpVZ7r6-AhYARKukA_jhcpxs",
+          "localized": null,
+          "city_state": "San Francisco, CA",
+          "description": "",
+          "sublocality": "Alamo Square",
+          "country_code": "US",
+          "full_address": "500 Divisadero St, San Francisco, CA 94117, USA",
+          "region_short": "CA",
+          "short_address": "500 Divisadero St, San Francisco",
+          "place_coordinate": null,
+          "mode": "shown"
+        },
+        "geo_address_visibility": "public",
+        "coordinate": {"longitude": -122.4373746, "latitude": 37.7742011},
+        "waitlist_enabled": false,
+        "waitlist_status": "disabled"
+      },
+      "calendar": {
+        "access_level": "public",
+        "api_id": "cal-oWJafai4qVBegex",
+        "avatar_url": "https://images.lumacdn.com/calendars/9i/454f12f2-420a-440b-b61e-cf2d4d2cd1be.jpg",
+        "description_short": "A lecture series hosted in The Bay's  coolest spaces.",
+        "name": "Big Brain Lectures - Bay Area",
+        "slug": "Big-Brain-Bay",
+        "tint_color": "#7a0000",
+        "is_personal": false,
+        "personal_user": null,
+        "timezone": "America/Los_Angeles"
+      },
+      "hosts": [
+        {
+          "api_id": "usr-G7vZaxGDooL5N3W",
+          "avatar_url": "https://images.lumacdn.com/uploads/km/7cb7f9fa-cad5-45c4-be89-eadb403dbb01.jpg",
+          "first_name": "",
+          "last_name": "",
+          "name": "Big Brain Bay Area",
+          "website": null
+        }
+      ],
+      "guest_count": 4,
+      "ticket_count": 4,
+      "ticket_info": {
+        "price": {"cents": 2700, "currency": "usd", "is_flexible": false},
+        "is_free": false,
+        "max_price": null,
+        "is_sold_out": false,
+        "spots_remaining": 101,
+        "is_near_capacity": false,
+        "require_approval": false
+      },
+      "registration_availability": "open",
+      "manager_info": null,
+      "guest_info": null,
+      "host_info": null,
+      "waitlist_active": false,
+      "featured_city": null,
+      "tags": [
+        {"api_id": "tag-d1dqIiW0hTvnAXX", "name": "21+", "color": "green"},
+        {"api_id": "tag-HIcwUClnWwm7Hsi", "name": "SF", "color": "cranberry"}
+      ]
+    },
+    {
+      "api_id": "calev-fixtureOnline1",
+      "calendar_api_id": "cal-oWJafai4qVBegex",
+      "start_at": "2026-10-14T17:00:00.000Z",
+      "platform": "luma",
+      "status": "approved",
+      "event": {
+        "api_id": "evt-fixtureOnline1",
+        "calendar_api_id": "cal-oWJafai4qVBegex",
+        "cover_url": null,
+        "end_at": null,
+        "location_type": "zoom",
+        "name": "  Intro to   Evals (Online) ",
+        "start_at": "2026-10-14T17:00:00.000Z",
+        "timezone": "America/New_York",
+        "url": null,
+        "visibility": "public",
+        "virtual_info": {"has_access": false},
+        "geo_address_info": null,
+        "coordinate": null,
+        "waitlist_enabled": true,
+        "waitlist_status": "active"
+      },
+      "calendar": {
+        "api_id": "cal-oWJafai4qVBegex",
+        "name": "Big Brain Lectures - Bay Area",
+        "slug": "Big-Brain-Bay",
+        "avatar_url": "https://images.lumacdn.com/calendars/9i/454f12f2-420a-440b-b61e-cf2d4d2cd1be.jpg",
+        "description_short": null,
+        "tint_color": "#7a0000"
+      },
+      "hosts": [
+        {"api_id": "usr-fixture00003", "name": "   ", "first_name": "", "last_name": ""},
+        {"api_id": "usr-fixture00004", "name": "Sam Lee", "first_name": "Sam", "last_name": "Lee", "avatar_url": ""}
+      ],
+      "ticket_info": null,
+      "registration_availability": null,
+      "guest_info": {"api_id": "gst-fixture00002", "approval_status": "invited"},
+      "waitlist_active": false,
+      "tags": []
+    },
+    {
+      "api_id": "calev-fixtureBroken",
+      "calendar_api_id": "cal-oWJafai4qVBegex",
+      "start_at": "2026-10-20T02:00:00.000Z",
+      "event": null,
+      "hosts": []
+    }
+  ],
+  "has_more": true,
+  "next_cursor": "eyJzdiI6IjIwMjYtMTAtMTRUMDI6MDA6MDAuMDAwWiIsImZiIjoiY2FsZXYtTEFuYWtxZFJpWTNvUU5XIn0"
+}
