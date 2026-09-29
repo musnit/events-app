@@ -1,3 +1,6 @@
+# systemd user unit for the old clawd.musnitzky.com host. On devbox the app runs as the
+# `events` prototype instead (see AGENTS.md). Build the web app before (re)starting:
+#   npm --prefix /home/ubuntu/luma-cal/web ci && npm --prefix /home/ubuntu/luma-cal/web run build
 [Unit]
 Description=Luma followed-calendars view
 After=network.target
@@ -5,6 +8,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=/home/ubuntu/luma-cal
+Environment=PORT=8771
 ExecStart=/usr/bin/python3 /home/ubuntu/luma-cal/server.py
 Restart=on-failure
 RestartSec=2

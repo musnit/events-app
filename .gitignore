@@ -1,8 +1,17 @@
+# Runtime state: SQLite database with secrets, plus imported v1 files.
+/data/
+__pycache__/
+*.pyc
+
+# Frontend dependencies and build output (build with: npm --prefix web ci && npm --prefix web run build)
+web/node_modules/
+web/dist/
+
+# v1 kept its state next to server.py; the first start moves these into data/legacy/.
 .session.json
 .session.json.tmp
 cache.json
 cache.json.tmp
-__pycache__/
 .partiful_auth.json
 partiful_debug.json
 .luma_calendars.json
