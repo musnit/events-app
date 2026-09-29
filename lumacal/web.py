@@ -390,7 +390,7 @@ class App:
             account = self.sync.partiful.id_token({"uid": login["uid"], "refresh_token": login["refresh_token"]})
         except partiful_src.PartifulError as e:
             raise ApiError(400, str(e)) from None
-        if not account.get("uid"):
+        if not account.get("uid") or ":" in account["uid"]:
             raise ApiError(400, "Partiful did not say which account this is")
         self.store.save_partiful_account(account)
         uid = account["uid"]
@@ -436,7 +436,8 @@ class App:
                                 "text/plain; charset=utf-8")
         body, gz = self._read_static(file)
         ctype = _content_type(file)
-        headers = {"Cache-Control": "public, max-age=31536000, immutable" if rel.startswith("assets/") else "no-cache"}
+        hashed_asset = file.parent == (root / "assets").resolve() and file.name != "index.html"
+        headers = {"Cache-Control": "public, max-age=31536000, immutable" if hashed_asset else "no-cache"}
         if file.name == "index.html":
             body = _with_base(body, req.headers.get("X-Forwarded-Prefix"))
             gz = None
@@ -505,9 +506,15 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _serve(self) -> None:
         parsed = urllib.parse.urlsplit(self.path)
-        length = int(self.headers.get("Content-Length") or 0)
-        if length > MAX_BODY:
-            self._send(json_response({"error": "request too large"}, 413), head=False)
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = -1
+        if length < 0 or length > MAX_BODY:
+            # The unread body would otherwise be parsed as the next request on this connection.
+            self.close_connection = True
+            error = ("request too large", 413) if length > MAX_BODY else ("bad Content-Length", 400)
+            self._send(json_response({"error": error[0]}, error[1]), head=False)
             return
         body = self.rfile.read(length) if length else b""
         # Routing sees the raw path; the router decodes each parameter once, so "%2F" stays inside an id.

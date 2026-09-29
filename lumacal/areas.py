@@ -75,6 +75,7 @@ COUNTRY_RE = re.compile(r"(?:^|,)\s*(ireland|england|scotland|united kingdom|uk|
 FAR_CITY_RE = re.compile(r"\b(london|paris|berlin|tokyo|toronto|new york|nyc|brooklyn|boston|chicago|austin|seattle|miami|"
                          r"los angeles|denver|atlanta|washington,? d\.?c\.?)\b", re.I)
 PACIFIC = {"America/Los_Angeles", "US/Pacific", "PST8PDT"}
+UNINFORMATIVE_ZONES = {"UTC", "Etc/UTC", "GMT", "Etc/GMT", "Z", "Universal", "Zulu"}
 
 
 def _km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -117,6 +118,8 @@ def classify(ev: dict) -> tuple[str, str | None]:
     if zone:
         return "bay", zone
     timezone = ev.get("timezone")
+    if timezone in UNINFORMATIVE_ZONES:
+        timezone = None
     if timezone and timezone not in PACIFIC:
         return "elsewhere", None
     text = " ".join(str(x) for x in (loc.get("venue"), loc.get("address"), loc.get("city"), loc.get("neighborhood")) if x)

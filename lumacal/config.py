@@ -57,5 +57,5 @@ class Settings:
             agihouse_refresh=_number(env, "AGIHOUSE_REFRESH_SECONDS", 2 * HOUR),
             luma_spacing=_number(env, "CALENDAR_SPACING", 15),
             manual_spacing=_number(env, "MANUAL_SPACING", 2),
-            sync_enabled=env.get("LUMACAL_SYNC", "1") != "0",
+            sync_enabled=env.get("LUMACAL_SYNC", "1").strip().lower() not in ("0", "false", "no", "off"),
         )

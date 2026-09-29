@@ -188,6 +188,9 @@ def calendar_tokens(text: str) -> list[str]:
     seen: list[str] = []
     for match in LINK_RE.finditer(text or ""):
         token = (match.group(2) or match.group(1) or "").strip("/").split("?")[0].split("#")[0]
+        embedded = re.search(r"\b(cal-[A-Za-z0-9]{10,24})\b", token)
+        if embedded:  # e.g. luma.com/calendar/manage/cal-…
+            token = embedded.group(1)
         if token and token not in seen:
             seen.append(token)
     return seen
@@ -300,7 +303,10 @@ class LumaClient:
             if cursor:
                 page["pagination_cursor"] = cursor
             data = self.call(path, page, session_key=session_key)
-            entries.extend(e for e in data.get("entries") or [] if isinstance(e, dict))
+            if not isinstance(data.get("entries"), list):
+                # Treat a changed response shape as an error; an empty pull would wipe the feed's events.
+                raise LumaError(200, f"unexpected response from {path} (no entries list)")
+            entries.extend(e for e in data["entries"] if isinstance(e, dict))
             if not data.get("has_more") or not data.get("next_cursor"):
                 break
             cursor = data["next_cursor"]

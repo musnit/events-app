@@ -22,6 +22,7 @@ from .sources import scrub
 from .timeutil import to_iso
 
 ORIGINS = ("followed", "import", "link", "builtin")
+HISTORY_KEEP_DAYS = 60  # past events kept for the month view before pruning
 
 
 @dataclass(frozen=True)
@@ -276,9 +277,12 @@ class Store:
         kept as history so the month view can still show them."""
         now = self.clock()
         now_iso = to_iso(now)
+        # Feeds such as personal iCal links repeat old events forever; past the history window
+        # they would be pruned and re-added on every pull.
+        oldest = to_iso(now - HISTORY_KEEP_DAYS * 86400)
         rows = {}
         for ev in events:
-            if ev.get("id") and ev.get("start_at"):
+            if ev.get("id") and ev.get("start_at") and (ev.get("end_at") or ev["start_at"]) >= oldest:
                 rows[ev["id"]] = (ev, json.dumps(ev, sort_keys=True, separators=(",", ":")))
         with self.db.transaction() as conn:
             feed = conn.execute("SELECT calendar_id, last_ok_at FROM feeds WHERE key = ?", (feed_key,)).fetchone()
@@ -367,7 +371,7 @@ class Store:
 
     # ---------- housekeeping ----------
 
-    def prune(self, keep_days: float = 60) -> int:
+    def prune(self, keep_days: float = HISTORY_KEEP_DAYS) -> int:
         """Forget events that ended more than ``keep_days`` ago. Returns the number of listings removed."""
         cutoff = to_iso(self.clock() - keep_days * 86400)
         with self.db.transaction() as conn:

@@ -89,6 +89,7 @@ class Catalog:
             ev["first_seen_at"] = to_iso(first_seen) if first_seen else None
             ev["announced_at"] = to_iso(announced) if announced else None
             ev["also_on"] = []
+            ev["merged_ids"] = []
             events.append(ev)
 
         events = self._merge_duplicates(events)
@@ -97,9 +98,10 @@ class Catalog:
             ev["area"], ev["zone"] = areas.classify(ev)
             ev["vibes"], ev["topics"] = categorize.classify(ev, [cal_names.get(c, "") for c in ev["calendar_ids"]])
             ev["size"] = categorize.size_of(ev.get("guest_count"))
-            mark = marks.get(ev["id"], {})
-            ev["starred"] = bool(mark.get("starred"))
-            ev["hidden"] = bool(mark.get("hidden"))
+            # A star or hide set on a copy that was later folded into this event still counts.
+            own = [marks.get(i, {}) for i in (ev["id"], *ev.pop("merged_ids"))]
+            ev["starred"] = any(m.get("starred") for m in own)
+            ev["hidden"] = any(m.get("hidden") for m in own)
             ev["muted"] = bool(ev["calendar_ids"]) and all(c in muted for c in ev["calendar_ids"])
         events.sort(key=lambda e: (e["start_at"], e["name"]))
 
@@ -145,6 +147,7 @@ class Catalog:
                     if match:
                         break
             if match:
+                match["merged_ids"].append(ev["id"])
                 match["calendar_ids"] = sorted(set(match["calendar_ids"]) | set(ev["calendar_ids"]))
                 match["also_on"].append({"source": ev["source"], "url": ev["url"]})
                 if ev["going"] and not match["going"]:
@@ -172,7 +175,7 @@ class Catalog:
     def events_for_feed(self, *, starred_or_going: bool) -> list[dict]:
         events = self.build()["events"]
         now = to_iso(self.clock() - 86400)
-        chosen = [e for e in events if (e.get("end_at") or e["start_at"]) >= now and not e["hidden"]]
+        chosen = [e for e in events if (e.get("end_at") or e["start_at"]) >= now and not e["hidden"] and not e["muted"]]
         if starred_or_going:
             chosen = [e for e in chosen if e["going"] or e["starred"]]
         return chosen

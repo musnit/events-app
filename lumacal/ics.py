@@ -83,10 +83,13 @@ def parse(text: str) -> list[dict]:
             else:
                 depth = max(0, depth - 1)
             continue
-        if depth or ":" not in line:
+        if depth:
             continue
-        head, _, value = line.partition(":")
-        name, *raw_params = head.split(";")
+        split = _value_start(line)
+        if split < 0:
+            continue
+        head, value = line[:split], line[split + 1:]
+        name, *raw_params = _split_params(head)
         params = {}
         for item in raw_params:
             if "=" in item:
@@ -95,6 +98,31 @@ def parse(text: str) -> list[dict]:
         current[name.upper()] = value
         current[name.upper() + "__params"] = params
     return events
+
+
+def _value_start(line: str) -> int:
+    """Index of the colon that ends the property name and parameters; quoted values may contain colons."""
+    quoted = False
+    for i, ch in enumerate(line):
+        if ch == '"':
+            quoted = not quoted
+        elif ch == ":" and not quoted:
+            return i
+    return -1
+
+
+def _split_params(head: str) -> list[str]:
+    parts, current, quoted = [], [], False
+    for ch in head:
+        if ch == '"':
+            quoted = not quoted
+        if ch == ";" and not quoted:
+            parts.append("".join(current))
+            current = []
+        else:
+            current.append(ch)
+    parts.append("".join(current))
+    return parts
 
 
 def event_times(vevent: dict) -> tuple[str | None, str | None, bool]:

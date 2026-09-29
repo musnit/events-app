@@ -225,7 +225,9 @@ class PartifulClient:
             data = resp.json()
         except ValueError:
             raise PartifulError(f"{name} answered with something that is not JSON") from None
-        return data.get("result") if isinstance(data, dict) else None
+        if not isinstance(data, dict) or "result" not in data:
+            raise PartifulError(f"{name} answered in an unexpected shape")
+        return data["result"]
 
     def events(self, account: dict, name: str) -> list[dict]:
         found: list[dict] = []

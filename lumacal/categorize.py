@@ -242,8 +242,8 @@ def _pick(categories: tuple[Category, ...], fields: dict[str, str]) -> list[str]
 TALK_HINTS = re.compile(r"\?(?:\s|$)|\bwith (?:dr|prof|professor)\b\.?|(?:^|\s)w/\s|\bfeat(?:uring)?\.?\s|\bft\.\s|\w: \w", re.I)
 SPEAKER = re.compile(r"\b(?:with|by) (?:[A-Z][\w.'-]+ ){1,2}[A-Z][\w'-]+")
 # Room holds and private bookings that calendars publish but nobody can attend.
-PLACEHOLDER = re.compile(r"^\s*(?:hold|held|blocked|reserved|test|tba|tbd)\b|[\[(]hold[\])]|\bplaceholder\b|\bdetails to come\b"
-                         r"|\bprivate (?:rental|event|booking)\b|^\s*busy\s*$", re.I)
+PLACEHOLDER = re.compile(r"^\s*(?:hold|blocked|test)\s*[-–—:|]|[\[(]hold[\])]|\bplaceholder\b|\bprivate (?:rental|booking)\b"
+                         r"|^\s*(?:private event|busy|tba|tbd|hold|blocked|test)\s*$", re.I)
 # Conference names such as "AGNTCon" or "DevConf".
 CONFERENCE = re.compile(r"\b[A-Z][A-Za-z0-9]*Conf?\b")
 

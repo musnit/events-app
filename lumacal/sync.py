@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import itertools
 import logging
+import sqlite3
 import threading
 import time
 from collections.abc import Callable
@@ -303,9 +304,15 @@ class Sync:
 
             for key in before - set(wanted):
                 store.delete_feed(key)
+            created = []
             for key, spec in wanted.items():
-                store.ensure_feed(key, **spec)
-            return sorted(set(wanted) - before)
+                try:
+                    store.ensure_feed(key, **spec)
+                except sqlite3.IntegrityError:
+                    continue  # its calendar was removed a moment ago
+                if key not in before:
+                    created.append(key)
+            return sorted(created)
 
     def sources_changed(self, *, refresh: list[str] | None = None) -> None:
         """Call after the user adds or removes a source. New feeds (and ``refresh`` keys) go to the front."""
@@ -406,6 +413,9 @@ class Sync:
                 self._drop_luma_session()
                 return
             raise
+        had = sum(1 for c in self.store.calendars() if "followed" in c["origins"])
+        if not calendars and had >= 3:
+            raise ValueError(f"Luma returned no followed calendars (had {had}); keeping them until it does")
         self.store.set_origin_calendars("followed", calendars)  # type: ignore[arg-type]
         self.store.record_success(feed.key, len(calendars))  # type: ignore[arg-type]
         self._enqueue(self.reconcile(), NEW)
