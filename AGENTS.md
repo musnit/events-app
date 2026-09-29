@@ -1,67 +1,126 @@
 # luma-cal — agent context
 
-One calendar view of every upcoming event across the Luma calendars musnit follows, plus his
-Partiful events. Luma's public API only covers calendars you *manage* (and needs Luma Plus), so
-this app signs in the way luma.com does and reads the site's internal endpoints. Partiful has no
-API at all, but each account gets a personal iCalendar feed, which we poll.
+One calendar of every upcoming event across the Luma calendars musnit follows, his Partiful events
+and AGI House. Luma's public API only covers calendars you *manage*, and Partiful has none, so the
+app reads the same internal endpoints their websites use. Everything upstream is unofficial.
 
-## Stack (dependency-free)
+## Layout
 
-- `server.py` — stdlib `http.server`, binds `127.0.0.1:8771`. Serves `web/` and a JSON API.
-  Sees paths at `/` (nginx strips `/events/`). Background thread refreshes every 4 h with 15 s between Luma calendar pulls (a full pass takes ~28 min); the refresh button uses 2 s spacing. Luma rate-limits bursts (429), and the app backs off and keeps a calendar's previous events when a pull fails.
-- `web/` — vanilla JS single page: month grid + list view, per-calendar colours and filters,
-  "going only" toggle, event popover linking to Luma/Partiful.
-- `cache.json` (gitignored) — last successful pull. `feed.ics` is generated from it so the
-  merged view can be subscribed to from Google/Apple Calendar.
-- `.session.json` (gitignored, 0600) — Luma session key + email. `.partiful.json` — feed URL.
-  `.partiful_auth.json` (0600) holds `{"accounts": [...]}`, one Firebase refresh token per connected Partiful account. The old single-login object still reads as one account.
+- `server.py` — entry point (`python3 server.py`), kept at the root so the service command never changes.
+- `lumacal/` — backend, Python 3.11+ **standard library only**.
+  - `config.py` settings from env · `db.py` SQLite + numbered migrations · `store.py` all SQL
+  - `sources/` one client per upstream (`luma.py`, `partiful.py`, `agihouse.py`) → listing dicts (shape in `sources/__init__.py`)
+  - `sync.py` background workers · `catalog.py` merges listings into the event list · `categorize.py` vibes/topics
+  - `areas.py` Bay Area zones · `ics.py` iCalendar read/write · `web.py` HTTP/API/static · `legacy.py` v1 import
+- `web/` — frontend: React 19 + TypeScript + Vite, plain CSS, no router or UI libraries.
+  - `src/lib/` pure logic (routes, filters, dates, formatting, API client, bookmarklets, PWA)
+  - `src/state/` data store (polling), router, toasts · `src/components/` · `src/views/` one file per screen
+  - `tests/` node:test unit tests · `scripts/ui-check.mjs` headless-Chromium screenshots and layout audit
+- `tests/` — backend unittest suite (offline; upstreams are faked).
+- `data/` (gitignored, 0700) — `lumacal.db` (events, sources, **secrets**, prefs) and `legacy/` (v1 files after import).
+- `deploy/` — unit and nginx route for the old clawd.musnitzky.com host (see Hosting).
 
-## How Luma sources are configured (phone-friendly first)
+## Commands
 
-1. **Calendar links** (default): musnit pastes luma.com calendar links; `resolve_luma_link` loads the
-   page's `__NEXT_DATA__` and finds the calendar object. Stored in `.luma_calendars.json`.
-2. **Bookmarklet**: run on luma.com, it fetches `/home/get-following-calendars` with the browser's
-   cookies and redirects to `/events/#import=<base64 json>`; the frontend posts it to `/api/luma/import`.
-3. **Session cookie** (desktop only): paste `luma.auth-session-key`; then the followed list and
-   registered events sync automatically. The email-code flow is blocked by Luma's Turnstile check.
-4. **Personal iCal feed** (optional): Settings → Calendar Syncing link; marks registered events ✓.
-   Accepts the raw ics/get URL, webcal://, or the Google add-by-URL link (`cid=`).
+```sh
+python3 -m unittest discover -s tests -t .      # backend tests
+npm --prefix web ci                              # frontend deps (pinned, lockfile committed)
+npm --prefix web test                            # frontend unit tests
+npm --prefix web run build                       # type-check + build into web/dist (the server serves it)
+scripts/check.sh                                 # all of the above
+LUMACAL_SYNC=0 PORT=8771 python3 server.py       # run without background sync (UI work)
+npm --prefix web run dev                         # Vite dev server on 127.0.0.1:5173, proxies /api to $LUMACAL_API or :8771
+BROWSER_BIN=… BASE_URL=http://127.0.0.1:8771/ npm --prefix web run check:ui   # screenshots in /tmp/lumacal-ui
+python3 -m lumacal.categorize data/lumacal.db [vibes|topics]                  # categorization coverage report
+```
 
-## Luma internals used (api.luma.com, undocumented, may change)
+On this box a Chromium lives in the Nix store (`ls -d /nix/store/*-chromium-1*/bin/chromium`). Emoji need a
+font: point `FONTCONFIG_FILE` at a config that adds Noto Color Emoji, or chips show boxes in screenshots.
 
-- Email-code sign-in is blocked by a Cloudflare Turnstile check (`auth/additional-verification-required`), so the normal path is pasting the `luma.auth-session-key` cookie from a logged-in browser (`POST /api/auth/session`). Kept for reference: `POST /auth/email/send-sign-in-code {email}` then `POST /auth/email/sign-in-with-code
-  {email, code}` → `Set-Cookie: luma.auth-session-key=…`. If the response has
-  `step: "two_factor"`, `POST /auth/sign-in-with-two-factor`.
-- `GET /home/get-following-calendars` (cookie) → calendars he follows. Response shape was
-  guessed from the redirect target; `normalize_calendar` accepts bare or wrapped objects.
-- `GET /calendar/get-items?calendar_api_id=cal-…&period=future&pagination_limit=50`
-  (public, paginated with `pagination_cursor`/`next_cursor`) → events per calendar.
-- `GET /home/get-events?period=future` (cookie) → events he registered for; marks `going`.
-- A 401 on refresh wipes `.session.json` so the UI asks to sign in again.
+## Data model
+
+- **calendar**: what the user sees and can mute (a Luma calendar, "Partiful · my events", "AGI House").
+  Kept while any *origin* claims it: `followed` (session sync), `import` (bookmarklet; the import is the
+  complete followed set, so re-running it also drops unfollowed calendars), `link`, `builtin`.
+- **feed**: one unit a worker pulls (`luma:cal-…`, `luma:following`, `luma:mine`, `luma:ics`,
+  `partiful:<uid>:mine|following`, `partiful:feed`, `agihouse`). Holds sync health and backoff.
+- **listing**: an event as one feed reported it. A good pull replaces the feed's *upcoming* listings;
+  past ones stay as history (pruned after 60 days). The catalog merges listings by event id, folds
+  cross-source duplicates (same title ±3 h), applies RSVPs (`going`), marks (star/hide) and mutes.
+- `event_seen.announced_at` is set only for events that appear after a feed's first pull, which drives
+  the "New since your last visit" badge (the client keeps the visit reference in localStorage).
+
+## Sync
+
+One worker thread per upstream with a de-duplicated priority queue: user refresh > newly added source >
+schedule. Nothing is dropped; asking again only raises priority. Each pull is stored immediately, so the
+UI fills in during a pass and restarts resume from per-feed timestamps. Intervals: Luma calendars 4 h,
+15 s apart (`CALENDAR_SPACING`); user-triggered pulls 2 s apart; personal feeds, Partiful 1 h; AGI House 2 h.
+A 429 pauses the Luma worker (45 s → 5 min) and retries; other failures back off per feed (10 min → 4 h)
+and keep the feed's previous listings. A Luma 401 forgets the session and retries without it.
+
+## Luma internals (api.luma.com, undocumented)
+
+- `GET /calendar/get-items?calendar_api_id=cal-…&period=future` public, paginated (`pagination_cursor`/`next_cursor`).
+  Entries carry `event`, `calendar` (presenter, with `description_short`), `hosts`, `tags`, `ticket_info`,
+  `guest_count`, `registration_availability`, `guest_info` (only with a session).
+- `GET /home/get-following-calendars`, `GET /home/get-events?period=future` need the `luma.auth-session-key` cookie.
+- Email-code sign-in is blocked by Cloudflare Turnstile (`auth/additional-verification-required`), so it was
+  removed. Sessions come from a pasted cookie (desktop). The cookie is HttpOnly, so the bookmarklet cannot
+  capture it; it sends the followed calendars and a snapshot of RSVPs instead. The personal iCal link
+  (Settings → Calendar Syncing) keeps RSVPs current.
+- Calendar links resolve by loading the luma.com page and reading `__NEXT_DATA__`.
+- If syncing breaks, re-pull luma.com's JS chunks and grep for `get-following-calendars`, `home/get-events`.
 
 ## Partiful
 
-Feed URL looks like `webcal://calendars.partiful.com/getCalendar?id=…`. The user gets it from
-any event page → calendar icon → Google Calendar → Copy Link. `fetch_partiful` converts
-webcal→https, parses VEVENTs (TZID, UTC and all-day DATE forms), drops events older than a day.
+The bookmarklet reads the Firebase refresh token from partiful.com's IndexedDB. The server mints ID tokens
+(`securetoken.googleapis.com`, public web key) and calls `getMyFollowedEvents` and
+`getMyUpcomingEventsForHomePage` on `api.partiful.com`. Several accounts can be connected. Upload images
+live in a private bucket, so covers go through `partiful.imgix.net`. The personal iCal link
+(`webcal://calendars.partiful.com/getCalendar?id=…`) is an alternative with invites/RSVPs only.
+
+## Categories
+
+`categorize.py` scores keyword rules over title (weight 3), tags (2), presenter name + listing calendars (2),
+presenter description (1) and hosts (0.75); a category needs 3. Up to three vibes and three topics per event;
+if no vibe reaches 3 the best weak signal (≥1.5) wins, with talk-shaped titles counting toward "Learn".
+Room holds ("HOLD – …", "Private Event", "[Hold]") are dropped. Bump `RULES_VERSION` when rules change.
+
+## Web app
+
+Every screen is a URL (`web/src/lib/routes.ts`): `/`, `/agenda/2026-10-03`, `/day/2026-10-03`,
+`/month/2026-10`, `/event/<id>`, `/saved`, `/calendars`, `/calendars/<id>`, `/sources[/luma|partiful|…]`.
+Filters live in the query (`?vibe=party,social&topic=ai&time=evening&weekend=1&zone=sf&q=…`). An event opened
+from a list is drawn over it (history state `background`); opened directly it is a page. The server returns
+index.html for extensionless paths and rewrites `<base href>` from `X-Forwarded-Prefix`, so the app also
+works under a path prefix. It is an installable PWA; `public/sw.js` never caches anything (portal sign-in
+and private data), it only shows an offline page.
 
 ## API
 
-`GET /api/state` · `POST /api/auth/{send-code,verify,two-factor,signout}` ·
-`POST /api/partiful {url}` (empty url removes) · `POST /api/refresh` · `GET /feed.ics`.
+`GET /api/events` (catalog; ETag/304, gzip) · `GET /api/status` (sources, workers, feeds, prefs) ·
+`POST /api/sync {source?}` · `PUT /api/prefs {muted_calendars?, area?}` · `PUT /api/events/<id>/mark {starred?, hidden?}` ·
+`GET /api/events/<id>/ics` · `GET /feed.ics?scope=mine|all` ·
+`POST /api/luma/import {payload}` · `POST /api/luma/calendars {text}` · `DELETE /api/luma/calendars/<id>` ·
+`PUT|DELETE /api/luma/session` · `PUT|DELETE /api/luma/ics` · `POST /api/partiful/import {payload}` ·
+`DELETE /api/partiful/accounts/<uid>` · `PUT|DELETE /api/partiful/feed` · `GET /api/health`.
+Writes must be same-origin JSON (Sec-Fetch-Site/Origin checked); the portal in front handles sign-in.
 
 ## Hosting
 
-- systemd user service `luma-cal.service` (`deploy/luma-cal.service`). Restart after editing
-  the server: `systemctl --user restart luma-cal`.
-- Route `https://clawd.musnitzky.com/events/` via the agentlab-nginx container behind Authelia.
-  Route file `deploy/events.conf` → `/home/ubuntu/agentlab/services/nginx/routes/events.conf`,
-  then `docker exec agentlab-nginx nginx -t && docker exec agentlab-nginx nginx -s reload`.
-- Port 8771 (8765/8766/8770 are property-comps, furnishing, home-ops).
+- **devbox (current)**: prototype `events` → https://events.devbox.musnitzky.com/ (portal sign-in required).
+  It runs `python3 server.py` from the main checkout `/home/lab/events-app` as user unit
+  `prototype-events.service`; the helper supplies `HOST`/`PORT`. To deploy: `git -C /home/lab/events-app pull --ff-only`,
+  `npm --prefix /home/lab/events-app/web ci && npm --prefix /home/lab/events-app/web run build`,
+  `prototype restart events`; check `prototype logs events`. Never point it at a T3 worktree.
+- **clawd.musnitzky.com (old)**: `deploy/luma-cal.service` + `deploy/events.conf` (nginx strips `/events/` and sends
+  `X-Forwarded-Prefix`). Build the web app there too before restarting.
 
 ## Gotchas
 
-- Everything on the Luma side is unofficial. If refreshes start failing, re-pull luma.com's
-  JS chunks and grep for `send-sign-in-code`, `home/get-events`, `get-following-calendars`.
-- The frontend has no service worker, so there is no cache to bump.
-- Never commit `.session.json`, `.partiful.json` or `cache.json`.
+- `data/lumacal.db` holds the Luma session, Partiful refresh tokens and private feed URLs. Never commit `data/`.
+- The API never returns secrets; feed URLs come back masked.
+- Calendar apps cannot subscribe to `/feed.ics` because the portal requires sign-in; it is a download.
+- Frontend TypeScript must stay erasable (no enums/namespaces) and import with `.ts` extensions, because
+  `node --test` runs the lib modules directly.
