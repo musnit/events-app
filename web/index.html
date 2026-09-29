@@ -1,146 +1,21 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Events · Luma + Partiful</title>
-<link rel="stylesheet" href="style.css?v=21">
-</head>
-<body>
-<header>
-  <div class="brand">Events · Luma + Partiful</div>
-  <nav id="nav" hidden>
-    <button id="prev" title="Previous">‹</button>
-    <button id="next" title="Next">›</button>
-    <span id="month-label"></span>
-    <span class="spacer"></span>
-    <div class="seg"><button id="view-day">Today</button><button id="view-grid">Month</button><button id="view-list" class="on">List</button></div>
-    <select id="area"><option value="bay">Bay Area</option><option value="bay+online">Bay Area + online</option><option value="all">Everywhere</option></select>
-    <label class="toggle"><input type="checkbox" id="going-only"> going only</label>
-    <button id="refresh" title="Pull fresh data from Luma">↻</button>
-    <a id="ics" href="feed.ics" title="Subscribe in Google/Apple Calendar">.ics</a>
-    <button id="sources-btn" class="quiet">sources</button>
-  </nav>
-</header>
-
-<main>
-  <section id="signin" hidden>
-    <button id="back-btn" class="quiet" hidden>← back to calendar</button>
-
-    <h2>Luma</h2>
-    <p>Luma has no way for another app to ask "who does this person follow", so a one-time bookmark does it from your own logged-in browser. Tap it once on luma.com and every calendar you follow lands here. Setup takes about a minute.</p>
-    <div class="platform-tabs"><button data-pick="ios">iPhone</button><button data-pick="android">Android</button><button data-pick="desktop">Computer</button></div>
-    <ol class="steps" data-platform="ios" hidden>
-      <li>Tap <b>Copy bookmarklet</b> below.</li>
-      <li>Tap Safari's <b>Share</b> button → <b>Add Bookmark</b> → Save. (It bookmarks this page; that's fine.)</li>
-      <li>Open <b>Bookmarks</b> (book icon) → <b>Edit</b> → tap the new bookmark → clear the <b>Address</b> field and paste. Tap Done.</li>
-      <li>Go to <a href="https://luma.com/home" target="_blank" rel="noopener">luma.com/home</a>, make sure you are signed in, then open Bookmarks and tap that bookmark. You will land back here with everything imported.</li>
-    </ol>
-    <ol class="steps" data-platform="android" hidden>
-      <li>Tap <b>Copy bookmarklet</b> below.</li>
-      <li>In Chrome, tap ⋮ → ☆ to bookmark this page, then ⋮ → Bookmarks → ⋮ on it → Edit. Replace the URL with what you copied and name it "Import Luma".</li>
-      <li>Open <a href="https://luma.com/home" target="_blank" rel="noopener">luma.com/home</a> signed in, tap the address bar, type <b>Import Luma</b>, and pick the bookmark from the suggestions.</li>
-    </ol>
-    <ol class="steps" data-platform="desktop" hidden>
-      <li>Drag the <b>Import Luma follows</b> link below onto your bookmarks bar (or copy it and create a bookmark with it as the address).</li>
-      <li>Open <a href="https://luma.com/home" target="_blank" rel="noopener">luma.com/home</a> signed in and click the bookmark.</li>
-    </ol>
-    <div class="row-wrap">
-      <button type="button" id="copy-bookmarklet">Copy bookmarklet</button>
-      <a id="bookmarklet" href="#" data-platform="desktop" hidden>Import Luma follows</a>
-    </div>
-    <textarea id="bm-text" rows="3" readonly hidden></textarea>
-    <p id="import-msg" class="msg"></p>
-    <p id="luma-status" class="msg"></p>
-    <ul id="luma-manual" class="cal-chips"></ul>
-
-    <details class="alt"><summary>Add single calendars by link</summary>
-      <p>Paste one or more luma.com calendar links. In the Luma app: open a calendar → Share → Copy link.</p>
-      <form id="luma-links-form">
-        <textarea id="luma-links" rows="2" placeholder="https://luma.com/…"></textarea>
-        <button type="submit">Add</button>
-      </form>
-      <p id="luma-links-msg" class="msg"></p>
-    </details>
-
-    <details class="alt"><summary>Paste a Luma session cookie (computer only)</summary>
-      <p>Sign in at luma.com, open DevTools → Application/Storage → Cookies → luma.com, copy <code>luma.auth-session-key</code>, paste it here. The followed list and your RSVPs then sync on their own.</p>
-      <form id="session-form">
-        <input type="text" id="session-key" placeholder="luma.auth-session-key value" autocomplete="off">
-        <button type="submit">Use session</button>
-      </form>
-      <button id="signout" class="quiet" hidden>forget session</button>
-      <form id="email-form" hidden>
-        <input type="email" id="email" placeholder="you@example.com" autocomplete="email">
-        <button type="submit">Send code</button>
-      </form>
-      <form id="code-form" hidden>
-        <input type="text" id="code" inputmode="numeric" placeholder="123456" autocomplete="one-time-code">
-        <button type="submit">Sign in</button>
-      </form>
-      <form id="tfa-form" hidden>
-        <input type="text" id="tfa" inputmode="numeric" placeholder="123456">
-        <button type="submit">Verify</button>
-      </form>
-      <p id="signin-msg" class="msg"></p>
-    </details>
-
-    <details class="alt"><summary>Mark the Luma events I'm going to</summary>
-      <p>Optional. In Luma go to <b>Settings → Calendar Syncing → Add iCal Subscription</b>, pick <b>Google Calendar</b>, and copy the link it opens (it contains your personal feed). Paste it here and those events show with a ✓.</p>
-      <form id="luma-ics-form">
-        <input type="text" id="luma-ics-url" placeholder="https://api.lu.ma/ics/get?entity=user&id=… or the Google link">
-        <button type="submit">Save</button>
-        <button type="button" id="luma-ics-clear" class="quiet">remove</button>
-      </form>
-      <p id="luma-ics-msg" class="msg"></p>
-    </details>
-
-    <h2>Partiful</h2>
-    <p>Same idea as Luma: a one-time bookmark tapped on partiful.com hands this app your Partiful login. It then reads the events from people and orgs you follow, plus your own upcoming events, and keeps them fresh on its own.</p>
-    <p id="pf-status" class="msg"></p>
-    <ul id="pf-accounts" class="cal-chips"></ul>
-    <ol class="steps" data-platform="ios" hidden>
-      <li>Tap <b>Copy Partiful bookmarklet</b> below.</li>
-      <li>Safari <b>Share</b> → <b>Add Bookmark</b> → Save, then Bookmarks → Edit → tap it → replace the <b>Address</b> with the copied text.</li>
-      <li>Open <a href="https://partiful.com/events" target="_blank" rel="noopener">partiful.com/events</a> signed in, then open Bookmarks and tap it.</li>
-    </ol>
-    <ol class="steps" data-platform="android" hidden>
-      <li>Tap <b>Copy Partiful bookmarklet</b> below, bookmark this page in Chrome, then edit that bookmark's URL to the copied text and name it "Import Partiful".</li>
-      <li>Open <a href="https://partiful.com/events" target="_blank" rel="noopener">partiful.com/events</a> signed in, type <b>Import Partiful</b> in the address bar and pick the bookmark.</li>
-    </ol>
-    <ol class="steps" data-platform="desktop" hidden>
-      <li>Drag <b>Import Partiful</b> below to your bookmarks bar, open <a href="https://partiful.com/events" target="_blank" rel="noopener">partiful.com/events</a> signed in, and click it.</li>
-    </ol>
-    <div class="row-wrap">
-      <button type="button" id="copy-pf-bookmarklet">Copy Partiful bookmarklet</button>
-      <a id="pf-bookmarklet" href="#" data-platform="desktop" hidden>Import Partiful</a>
-    </div>
-    <textarea id="pf-bm-text" rows="3" readonly hidden></textarea>
-    <p id="pf-import-msg" class="msg"></p>
-
-    <details class="alt"><summary>Or just the calendar feed link</summary>
-      <p>Covers only events you are invited to or going to. On any Partiful event tap the calendar icon, choose <b>Google Calendar</b>, then <b>Copy Link</b>, and paste it here.</p>
-      <form id="partiful-form">
-        <input type="text" id="partiful-url" placeholder="webcal://calendars.partiful.com/getCalendar?id=…">
-        <button type="submit">Save</button>
-        <button type="button" id="partiful-clear" class="quiet">remove</button>
-      </form>
-      <p id="partiful-msg" class="msg"></p>
-    </details>
-  </section>
-
-  <section id="app" hidden>
-    <aside id="sidebar">
-      <div class="side-head">Calendars <button id="all-cals" class="quiet">all</button> <button id="no-cals" class="quiet">none</button></div>
-      <ul id="cal-list"></ul>
-      <p id="status" class="msg"></p>
-    </aside>
-    <div id="grid"></div>
-    <div id="list" hidden></div>
-  </section>
-</main>
-
-<div id="popover" hidden></div>
-<script src="app.js?v=19"></script>
-</body>
+  <head>
+    <base href="/" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0d0e12" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="Every upcoming event from the Luma calendars you follow, your Partiful invites and AGI House, in one calendar." />
+    <meta name="apple-mobile-web-app-title" content="Events" />
+    <link rel="icon" type="image/svg+xml" href="icon.svg" />
+    <link rel="apple-touch-icon" href="icon-180.png" />
+    <link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials" />
+    <title>Events</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>This app needs JavaScript to show your events.</noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
