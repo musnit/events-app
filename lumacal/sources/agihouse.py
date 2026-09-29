@@ -52,6 +52,9 @@ class AgiHouseClient:
 
     def events(self) -> list[dict]:
         resp = self._request(API, headers={"accept": "application/json", "origin": "https://www.agihouse.org"})
-        data = resp.json()
+        try:
+            data = resp.json()
+        except ValueError:
+            raise ValueError("AGI House answered with something that is not JSON") from None
         raw = data.get("events") if isinstance(data, dict) else None
         return [ev for ev in (normalize_event(r) for r in raw or []) if ev]

@@ -199,7 +199,10 @@ class PartifulClient:
                                 else f"token refresh failed ({e.status})", login_expired=dead) from None
         except net.NetError as e:
             raise PartifulError(str(e)) from None
-        token = resp.json()
+        try:
+            token = resp.json()
+        except ValueError:
+            raise PartifulError("token refresh answered with something that is not JSON") from None
         if not isinstance(token, dict) or not token.get("id_token"):
             raise PartifulError("token refresh returned no ID token")
         claims = jwt_claims(token["id_token"])
@@ -218,7 +221,10 @@ class PartifulClient:
             raise PartifulError(f"{name} answered {e.status}", login_expired=e.status == 401) from None
         except net.NetError as e:
             raise PartifulError(str(e)) from None
-        data = resp.json()
+        try:
+            data = resp.json()
+        except ValueError:
+            raise PartifulError(f"{name} answered with something that is not JSON") from None
         return data.get("result") if isinstance(data, dict) else None
 
     def events(self, account: dict, name: str) -> list[dict]:
