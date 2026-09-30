@@ -35,7 +35,10 @@ on the **Sources** page:
   you follow. You can connect several accounts. Partiful's iCal link is an
   alternative that carries invites and RSVPs only.
 - To follow any Luma calendar without a Luma account, paste its link under
-  **Add single calendars by link**.
+  **Add calendars or events by link**. An event link adds just that event,
+  private ones included: Luma lists only public events on a calendar, so a
+  private event otherwise reaches the app only through your own
+  registrations. An event added by link shows whichever area you choose.
 
 The deployment can also name calendars that are always followed
 (`EVENTS_LUMA_CALENDARS`, `services.events.lumaCalendars`,

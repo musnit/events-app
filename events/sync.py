@@ -38,6 +38,11 @@ LUMA_MINE = {"id": "luma-mine", "source": "luma", "name": "Luma · my registrati
              "tint_color": "#f0c040", "url": "https://luma.com/home", "description": None}
 
 
+def linked_feed(event_id: str) -> str:
+    """The feed that keeps an event added by link current."""
+    return f"luma:{event_id}"
+
+
 class RateLimited(Exception):
     pass
 
@@ -226,6 +231,7 @@ class Sync:
             "partiful-feed": settings.partiful_interval, "agihouse": settings.agihouse_interval,
             # Resolved once; start() makes it due again whenever the configured list changes.
             "luma-config": CONFIG_NEVER_STALE,
+            "luma-event": settings.luma_interval,
         }
         self.intervals = intervals
         self.workers: dict[str, Worker] = {}
@@ -266,6 +272,7 @@ class Sync:
                 removed = self.store.prune()
                 if removed:
                     log.info("pruned %s old listings", removed)
+                    self.reconcile()  # drops the feeds of events added by link that aged out
             except Exception:
                 log.exception("housekeeping failed")
 
@@ -320,6 +327,15 @@ class Sync:
                                       "label": "AGI House"}
             else:
                 store.remove_calendar(agihouse_src.CALENDAR["id"], "builtin")
+            linked = store.linked_events()
+            if linked:
+                store.upsert_calendar(luma_src.LINKED_CALENDAR, "builtin")
+            else:
+                store.remove_calendar(luma_src.LINKED_CALENDAR["id"], "builtin")
+            for link in linked:
+                wanted[linked_feed(link["event_id"])] = {"source": "luma", "kind": "luma-event",
+                                                         "calendar_id": luma_src.LINKED_CALENDAR["id"],
+                                                         "label": f"Luma · {link['name'] or link['event_id']}"}
             if self.settings.luma_calendars:
                 wanted[CONFIG_FEED] = {"source": "luma", "kind": "luma-config", "calendar_id": None,
                                        "label": "Luma · calendars from configuration"}
@@ -337,6 +353,15 @@ class Sync:
                 if key not in before:
                     created.append(key)
             return sorted(created)
+
+    def link_event(self, listing: dict) -> None:
+        """Add an event by link and show it at once; its feed keeps it current from then on."""
+        self.store.add_linked_event(listing)
+        key = linked_feed(listing["id"])
+        created = self.reconcile()
+        self.store.replace_listings(key, [listing])
+        # Sources added just before this one (calendars pasted alongside it) still go to the front.
+        self._enqueue([k for k in created if k != key], NEW)
 
     def sources_changed(self, *, refresh: list[str] | None = None) -> None:
         """Call after the user adds or removes a source. New feeds (and ``refresh`` keys) go to the front."""
@@ -388,7 +413,7 @@ class Sync:
         self.store.mark_attempt(feed.key)
         handler = {
             "calendar": self._pull_luma_calendar, "luma-following": self._pull_luma_following,
-            "luma-config": self._pull_luma_config,
+            "luma-config": self._pull_luma_config, "luma-event": self._pull_luma_event,
             "luma-mine": self._pull_luma_mine, "luma-ics": self._pull_luma_ics,
             "partiful-mine": self._pull_partiful, "partiful-following": self._pull_partiful,
             "partiful-feed": self._pull_partiful_feed, "agihouse": self._pull_agihouse,
@@ -419,7 +444,7 @@ class Sync:
         """Follow the calendars named in EVENTS_LUMA_CALENDARS. A cal- id stands on its own, so it is
         followed even when Luma cannot be reached; its name fills in on its first pull. A link or slug
         must be resolved, and one that fails is retried with the feed's backoff."""
-        tokens = [(luma_src.calendar_tokens(t) or [t])[0] for t in self.settings.luma_calendars]
+        tokens = [(luma_src.link_tokens(t) or [t])[0] for t in self.settings.luma_calendars]
         try:
             resolved = json.loads(self.store.get_meta("luma_config_resolved") or "{}")
         except ValueError:
@@ -462,6 +487,19 @@ class Sync:
         own = next((e["presenter"] for e in events if (e.get("presenter") or {}).get("id") == calendar_id), None)  # type: ignore[union-attr]
         if own:
             self.store.update_calendar_details(own)
+
+    def _pull_luma_event(self, feed: Feed) -> None:
+        event_id = feed.key.split(":", 1)[1]
+        key = self._luma_session()
+        try:
+            listing = self._luma_call(lambda: self.luma.event(event_id, key))
+        except luma_src.LumaError as e:
+            if not (key and e.unauthorized):
+                raise
+            self._drop_luma_session()
+            listing = self._luma_call(lambda: self.luma.event(event_id, None))
+        self.store.replace_listings(feed.key, [listing])
+        self.store.update_linked_event(listing)
 
     def _pull_luma_following(self, feed: Feed) -> None:
         key = self._luma_session()

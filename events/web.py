@@ -27,7 +27,7 @@ from .config import Settings
 from .sources import luma as luma_src
 from .sources import partiful as partiful_src
 from .store import Store
-from .sync import Sync
+from .sync import Sync, linked_feed
 from .timeutil import to_iso
 
 log = logging.getLogger(__name__)
@@ -141,8 +141,9 @@ class App:
         r("POST", "/api/sync", self.refresh)
         r("PUT", "/api/prefs", self.update_prefs)
         r("POST", "/api/luma/import", self.luma_import)
-        r("POST", "/api/luma/calendars", self.luma_add_calendars)
+        r("POST", "/api/luma/links", self.luma_add_links)
         r("DELETE", "/api/luma/calendars/{calendar_id}", self.luma_remove_calendar)
+        r("DELETE", "/api/luma/events/{event_id}", self.luma_remove_event)
         r("PUT", "/api/luma/session", self.luma_set_session)
         r("DELETE", "/api/luma/session", self.luma_clear_session)
         r("PUT", "/api/luma/ics", self.luma_set_ics)
@@ -251,6 +252,7 @@ class App:
         feed_cfg = self.store.get_secret("partiful_feed")
         calendars = self.store.calendars()
         feeds = [f.to_dict() for f in self.store.feeds()]
+        errors = {f["key"]: f["last_error"] for f in feeds}
         accounts = [{"uid": a["uid"], "name": a.get("name") or partiful_src.jwt_claims(a.get("id_token")).get("name"),
                      "added_at": a["added_at"]} for a in self.store.partiful_accounts()]
         luma_cals = [c for c in calendars if c["source"] == "luma" and c["id"].startswith("cal-")]
@@ -265,6 +267,8 @@ class App:
                 "calendars_by_origin": {o: sum(1 for c in luma_cals if o in c["origins"])
                                         for o in ("followed", "import", "link", "config")},
                 "going_snapshot": sum(1 for _ in self.store.going()),
+                "linked_events": [{"id": e["event_id"], "name": e["name"], "url": e["url"],
+                                   "last_error": errors.get(linked_feed(e["event_id"]))} for e in self.store.linked_events()],
             },
             "partiful": {"accounts": accounts, "feed": mask((feed_cfg or {}).get("url"))},
             "workers": self.sync.status(),
@@ -319,20 +323,24 @@ class App:
         return json_response({"total": len(payload.calendars), "added": len(added), "removed": len(removed),
                               "going": len(payload.going), "session": session_saved})
 
-    def luma_add_calendars(self, req: Request) -> Response:
-        tokens = luma_src.calendar_tokens(str(req.json().get("text") or ""))[:50]
+    def luma_add_links(self, req: Request) -> Response:
+        """Follow the calendars and add the single events that pasted luma.com links name."""
+        tokens = luma_src.link_tokens(str(req.json().get("text") or ""))[:50]
         if not tokens:
-            raise ApiError(400, "paste one or more luma.com calendar links")
+            raise ApiError(400, "paste one or more luma.com calendar or event links")
         added, failed = [], []
         for token in tokens:
             try:
-                cal = self.sync.luma.resolve_calendar(token)
+                kind, found = self.sync.luma.resolve_link(token)
             except (ValueError, luma_src.LumaError) as e:
                 failed.append({"link": token, "error": str(e)})
                 continue
-            self.store.upsert_calendar(cal, "link")
-            added.append({"id": cal["id"], "name": cal["name"]})
-        if added:
+            if kind == "event":
+                self.sync.link_event(found)
+            else:
+                self.store.upsert_calendar(found, "link")
+            added.append({"kind": kind, "id": found["id"], "name": found["name"]})
+        if any(a["kind"] == "calendar" for a in added):
             self.sync.sources_changed()
         return json_response({"added": added, "failed": failed})
 
@@ -347,6 +355,12 @@ class App:
             raise ApiError(409, "this calendar comes from " + " and ".join(
                 {"followed": "your Luma follows", "config": "the app's configuration"}[o] for o in kept))
         self.store.remove_calendar(calendar_id)
+        self.sync.sources_changed()
+        return json_response({"ok": True})
+
+    def luma_remove_event(self, req: Request) -> Response:
+        if not self.store.remove_linked_event(req.params["event_id"]):
+            raise ApiError(404, "no event added by link with that id")
         self.sync.sources_changed()
         return json_response({"ok": True})
 

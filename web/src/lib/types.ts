@@ -70,6 +70,8 @@ export interface EventItem {
   starred: boolean;
   hidden: boolean;
   muted: boolean;
+  /** Added by its own link, so the area filter leaves it in. */
+  linked: boolean;
 }
 
 export interface CalendarItem {
@@ -149,6 +151,7 @@ export interface Status {
     calendars: number;
     calendars_by_origin: Record<string, number>;
     going_snapshot: number;
+    linked_events: LinkedEvent[];
   };
   partiful: {
     accounts: { uid: string; name: string | null; added_at: number }[];
@@ -160,3 +163,10 @@ export interface Status {
 }
 
 export type AreaChoice = "bay" | "bay-online" | "all";
+
+export interface LinkedEvent {
+  id: string;
+  name: string | null;
+  url: string;
+  last_error: string | null;
+}

@@ -154,13 +154,17 @@ class CalendarTest(unittest.TestCase):
                                                 {"api_id": "cal-c"}, [{"x": {"api_id": "cal-d", "name": "D"}}]]}, found)
         self.assertEqual([c["api_id"] for c in found], ["cal-a", "cal-d"], "calendars are not searched inside, nameless ones skipped")
 
-    def test_calendar_tokens(self):
+    def test_link_tokens(self):
         cases = {
             "https://luma.com/Big-Brain-Bay?utm_source=share": ["Big-Brain-Bay"],
             "see lu.ma/sf-ai-club and https://www.luma.com/frontier#events, also lu.ma/sf-ai-club": ["sf-ai-club", "frontier"],
             "cal-oWJafai4qVBegex": ["cal-oWJafai4qVBegex"],
             "http://lu.ma/genai-sf/": ["genai-sf"],
             "https://luma.com/user/someone": ["user/someone"],
+            "an event: https://luma.com/cisai-886g": ["cisai-886g"],
+            "https://luma.com/event/evt-FNsJLjeVNGCdNxs?tk=abc": ["evt-FNsJLjeVNGCdNxs"],
+            "evt-FNsJLjeVNGCdNxs and luma.com/event/evt-FNsJLjeVNGCdNxs": ["evt-FNsJLjeVNGCdNxs"],
+            "evt-short": [],
             "hello world": [],
             "cal-short": [],
             "https://luma.com/": [],
@@ -168,8 +172,8 @@ class CalendarTest(unittest.TestCase):
         }
         for text, expected in cases.items():
             with self.subTest(text=text):
-                self.assertEqual(luma.calendar_tokens(text), expected)
-        self.assertEqual(luma.calendar_tokens(None), [])
+                self.assertEqual(luma.link_tokens(text), expected)
+        self.assertEqual(luma.link_tokens(None), [])
 
     def test_parse_session_key(self):
         self.assertEqual(luma.parse_session_key("  abc.DEF-123  "), "abc.DEF-123")
@@ -391,7 +395,7 @@ class LumaClientTest(unittest.TestCase):
         client, fake = self.client(lambda url, **kw: response("{}"))
         for token in ("user/jordan", "discover", "e/abc", "Home"):
             with self.subTest(token=token):
-                with self.assertRaisesRegex(ValueError, "not a calendar link"):
+                with self.assertRaisesRegex(ValueError, "not a calendar or event link"):
                     client.resolve_calendar(token)
         self.assertEqual(fake.calls, [])
         cases = [(net.HttpError(404, "", "https://luma.com/nope"), "no page there"),
@@ -407,6 +411,45 @@ class LumaClientTest(unittest.TestCase):
                 client, _ = self.client(lambda url, **kw: answer)
                 with self.assertRaisesRegex(ValueError, message):
                     client.resolve_calendar("some-slug")
+
+    def test_event_by_id_includes_private_events(self):
+        entry = dict(entries()[0])
+        entry["event"] = dict(entry["event"], visibility="private")
+        client, fake = self.client(lambda url, **kw: response(entry))
+        ev = client.event(entry["event"]["api_id"], "sess-1")
+        self.assertEqual(ev["id"], entry["event"]["api_id"])
+        url, kwargs = fake.calls[0]
+        self.assertEqual((url, kwargs["params"]), ("https://api.luma.com/event/get", {"event_api_id": ev["id"]}))
+        self.assertEqual(kwargs["headers"]["cookie"], "luma.auth-session-key=sess-1")
+        for answer in ({}, {"event": {"api_id": "evt-someoneelse01", "start_at": "2026-11-20T16:00:00.000Z"}}):
+            with self.subTest(answer=answer):
+                client, _ = self.client(lambda url, **kw: response(answer))
+                with self.assertRaisesRegex(LumaError, "no event"):
+                    client.event(entry["event"]["api_id"])
+
+    def test_resolve_link_tells_events_from_calendars(self):
+        entry = entries()[0]
+        event_page = {"props": {"pageProps": {"initialData": {"kind": "event", "data": entry}}}}
+        calendar_page = {"props": {"pageProps": {"initialData": {"kind": "calendar", "data": {"calendar": entry["calendar"]}}}}}
+        pages = {f"https://luma.com/{slug}": f'<script id="__NEXT_DATA__" type="application/json">{json.dumps(page)}</script>'
+                 for slug, page in (("an-event", event_page), ("Big-Brain-Bay", calendar_page))}
+        client, fake = self.client(lambda url, **kw: response(pages[url], content_type="text/html")
+                                   if url in pages else response(entry))
+        kind, found = client.resolve_link("an-event")
+        self.assertEqual((kind, found["id"]), ("event", entry["event"]["api_id"]))
+        # The event's own calendar is on its page too, but a calendar is only what a calendar page names.
+        with self.assertRaisesRegex(ValueError, "an event, not a calendar"):
+            client.resolve_calendar("an-event")
+        self.assertEqual(client.resolve_link("Big-Brain-Bay"), ("calendar", client.resolve_calendar("Big-Brain-Bay")))
+        # An evt- id needs no page: the API answers for it directly.
+        fake.calls.clear()
+        kind, found = client.resolve_link(entry["event"]["api_id"])
+        self.assertEqual((kind, found["id"]), ("event", entry["event"]["api_id"]))
+        self.assertEqual([c[0] for c in fake.calls], ["https://api.luma.com/event/get"])
+        fake.calls.clear()
+        with self.assertRaisesRegex(ValueError, "an event, not a calendar"):
+            client.resolve_calendar(entry["event"]["api_id"])
+        self.assertEqual(fake.calls, [], "a calendar lookup never fetches an event")
 
     def test_personal_feed(self):
         client, fake = self.client(lambda url, **kw: response(PersonalFeedTest.FEED, content_type="text/calendar"))

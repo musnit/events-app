@@ -61,7 +61,7 @@ test("Google Calendar links carry UTC times", () => {
     location: { type: "offline", venue: "Hall", address: "1 Main St", city: null, neighborhood: null, region: null, country: null, lat: null, lng: null },
     presenter: null, hosts: [], tags: [], ticket: null, guest_count: null, going: false, going_status: null, calendar_ids: [],
     first_seen_at: null, announced_at: null, also_on: [], area: "bay", zone: null, vibes: [], topics: [], size: null,
-    starred: false, hidden: false, muted: false,
+    starred: false, hidden: false, muted: false, linked: false,
   }));
   assert.equal(url.searchParams.get("dates"), "20261002T020000Z/20261002T040000Z");
   assert.equal(url.searchParams.get("location"), "Hall, 1 Main St");

@@ -96,7 +96,7 @@ class SmallEdgeCasesTest(unittest.TestCase):
         self.assertEqual(ev["SUMMARY"], "Talk: agents")
 
     def test_management_links_resolve_to_their_calendar_id(self):
-        self.assertEqual(luma.calendar_tokens("https://lu.ma/calendar/manage/cal-AbCdEfGhIjKl12/events"), ["cal-AbCdEfGhIjKl12"])
+        self.assertEqual(luma.link_tokens("https://lu.ma/calendar/manage/cal-AbCdEfGhIjKl12/events"), ["cal-AbCdEfGhIjKl12"])
 
     def test_utc_says_nothing_about_where_an_event_is(self):
         ev = {"location": {"type": "offline", "address": "2 Embarcadero Center, San Francisco"}, "timezone": "UTC", "name": "x"}

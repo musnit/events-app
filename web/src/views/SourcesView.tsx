@@ -193,6 +193,7 @@ export function SourcesView({ section, pwa }: { section: SourcesSection | null; 
   const failing = (status?.feeds ?? []).filter((f) => f.last_error);
   const luma = status?.luma;
   const linkCalendars = (catalog?.calendars ?? []).filter((c) => c.origins.includes("link"));
+  const linkedEvents = luma?.linked_events ?? [];
 
   return (
     <Page title="Sources" eyebrow="Where your events come from">
@@ -254,22 +255,26 @@ export function SourcesView({ section, pwa }: { section: SourcesSection | null; 
             {luma.calendars ? `${pluralize(luma.calendars, "calendar")} connected` : "No Luma calendars yet"}
             {luma.calendars_by_origin.config ? ` · ${luma.calendars_by_origin.config} set by the app's configuration` : ""}
             {luma.going_snapshot ? ` · ${pluralize(luma.going_snapshot, "RSVP")} from your last import` : ""}
+            {luma.linked_events.length ? ` · ${pluralize(luma.linked_events.length, "event")} added by link` : ""}
           </p>
         )}
         <h3>Import the calendars you follow</h3>
         <BookmarkletSteps code={lumaBookmarklet(root)} site="luma.com/home" siteUrl="https://luma.com/home" name="Import Luma" />
 
-        <details className="more">
-          <summary>Add single calendars by link</summary>
-          <p className="muted">In the Luma app: open a calendar → Share → Copy link. Paste one or more links.</p>
-          <ValueForm label="Calendar links" placeholder="https://luma.com/…" multiline button="Add"
+        <details className="more" open={linkCalendars.length + linkedEvents.length > 0}>
+          <summary>Add calendars or events by link</summary>
+          <p className="muted">
+            In the Luma app, open a calendar or an event → Share → Copy link, and paste one or more links. A calendar link follows the
+            calendar. An event link adds just that event, private ones included, and it shows whichever area you choose.
+          </p>
+          <ValueForm label="Calendar or event links" placeholder="https://luma.com/…" multiline button="Add"
             submit={async (text) => {
               const r = await api.lumaAddLinks(text);
               const added = r.added.length ? `Added ${r.added.map((a) => a.name).join(", ")}.` : "Nothing new added.";
               return r.failed.length ? `${added} Skipped: ${r.failed.map((f) => `${f.link} (${f.error})`).join("; ")}` : added;
             }} onDone={changed} />
           {linkCalendars.length > 0 && (
-            <ul className="chip-list">
+            <ul className="chip-list" aria-label="Calendars added by link">
               {linkCalendars.map((c) => (
                 <li key={c.id} className="chip static">
                   {c.name}
@@ -279,6 +284,23 @@ export function SourcesView({ section, pwa }: { section: SourcesSection | null; 
                   </button>
                 </li>
               ))}
+            </ul>
+          )}
+          {linkedEvents.length > 0 && (
+            <ul className="chip-list" aria-label="Events added by link">
+              {linkedEvents.map((e) => {
+                const name = e.name ?? e.id;
+                return (
+                  <li key={e.id} className="chip static" title={e.last_error ? `Could not refresh: ${e.last_error}` : undefined}>
+                    {e.last_error && <Icon name="alert" size={14} />}
+                    <Link to={href({ name: "event", id: e.id })}>{name}</Link>
+                    <button type="button" className="icon-button small" aria-label={`Remove ${name}`}
+                      onClick={() => void run(() => api.lumaRemoveEvent(e.id), `Removed ${name}`)}>
+                      <Icon name="close" size={14} />
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </details>

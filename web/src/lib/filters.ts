@@ -134,7 +134,7 @@ type Facet = "vibes" | "topics" | "times" | "zones" | "sizes";
 /** Whether an event passes the filters. ``skip`` ignores one facet, for counting that facet's options. */
 export function matchEvent(ev: EventItem, f: Filters, ctx: MatchContext, skip?: Facet): boolean {
   if (!f.hidden && (ev.hidden || ev.muted)) return false;
-  if (!inArea(ev, f.area ?? ctx.area)) return false;
+  if (!ev.linked && !inArea(ev, f.area ?? ctx.area)) return false;
   if (f.going && !ev.going) return false;
   if (f.free && !ev.ticket?.free) return false;
   if (f.open && ev.ticket?.sold_out) return false;

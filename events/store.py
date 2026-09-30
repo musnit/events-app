@@ -144,6 +144,33 @@ class Store:
             self._bump(conn)
             return gone
 
+    # ---------- events added by link ----------
+
+    def linked_events(self) -> list[dict]:
+        return [dict(row) for row in self.db.query("SELECT * FROM linked_events ORDER BY added_at")]
+
+    def add_linked_event(self, listing: dict) -> None:
+        """Remember an event added by link; adding it again refreshes its name and link."""
+        with self.db.transaction() as conn:
+            conn.execute("INSERT INTO linked_events (event_id, url, name, added_at) VALUES (?, ?, ?, ?) "
+                         "ON CONFLICT(event_id) DO UPDATE SET url = excluded.url, name = excluded.name",
+                         (listing["id"], listing["url"], listing.get("name"), self.clock()))
+            self._bump(conn)
+
+    def update_linked_event(self, listing: dict) -> None:
+        """Keep a linked event's name and link current. Never re-adds one removed in the meantime."""
+        with self.db.transaction() as conn:
+            conn.execute("UPDATE linked_events SET url = ?, name = ? WHERE event_id = ? AND (url, name) IS NOT (?, ?)",
+                         (listing["url"], listing.get("name"), listing["id"], listing["url"], listing.get("name")))
+
+    def remove_linked_event(self, event_id: str) -> bool:
+        """Forget an event added by link. Reconciling the feeds then drops its feed and listing."""
+        with self.db.transaction() as conn:
+            gone = conn.execute("DELETE FROM linked_events WHERE event_id = ?", (event_id,)).rowcount > 0
+            if gone:
+                self._bump(conn)
+            return gone
+
     # ---------- calendars ----------
 
     def calendars(self) -> list[dict]:
@@ -401,6 +428,9 @@ class Store:
             conn.execute("DELETE FROM event_seen WHERE event_id NOT IN (SELECT event_id FROM listings) AND first_seen_at < ?",
                          (self.clock() - keep_days * 86400,))
             conn.execute("DELETE FROM going WHERE event_id NOT IN (SELECT event_id FROM listings) AND updated_at < ?",
+                         (self.clock() - keep_days * 86400,))
+            # An event added by link goes once its listing has aged out; its feed follows on reconcile.
+            conn.execute("DELETE FROM linked_events WHERE event_id NOT IN (SELECT event_id FROM listings) AND added_at < ?",
                          (self.clock() - keep_days * 86400,))
             if removed:
                 self._bump(conn)

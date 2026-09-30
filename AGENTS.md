@@ -54,8 +54,11 @@ font: point `FONTCONFIG_FILE` at a config that adds Noto Color Emoji, or chips s
   Kept while any *origin* claims it: `followed` (session sync), `import` (bookmarklet; the import is the
   complete followed set, so re-running it also drops unfollowed calendars), `link`, `config`
   (`EVENTS_LUMA_CALENDARS`), `builtin`. The API refuses to remove `followed` and `config` calendars.
-- **feed**: one unit a worker pulls (`luma:cal-…`, `luma:following`, `luma:mine`, `luma:ics`, `luma:config`,
-  `partiful:<uid>:mine|following`, `partiful:feed`, `agihouse`). Holds sync health and backoff.
+- **feed**: one unit a worker pulls (`luma:cal-…`, `luma:evt-…`, `luma:following`, `luma:mine`, `luma:ics`,
+  `luma:config`, `partiful:<uid>:mine|following`, `partiful:feed`, `agihouse`). Holds sync health and backoff.
+- **linked event**: a single Luma event added by link (`linked_events`), private ones included. Its feed
+  `luma:evt-…` lists it under the builtin calendar `luma-links` and refreshes it like a calendar; the catalog
+  marks it `linked`, and the web app's area filter leaves it in. It goes when removed or when its listing ages out.
   `luma:config` resolves the configured links once (meta `luma_config_resolved`); it runs again only when the
   configured list changes (meta `luma_config_tokens`, compared at start) or after a failure's backoff.
 - **listing**: an event as one feed reported it. A good pull replaces the feed's *upcoming* listings;
@@ -83,7 +86,10 @@ and keep the feed's previous listings. A Luma 401 forgets the session and retrie
   removed. Sessions come from a pasted cookie (desktop). The cookie is HttpOnly, so the bookmarklet cannot
   capture it; it sends the followed calendars and a snapshot of RSVPs instead. The personal iCal link
   (Settings → Calendar Syncing) keeps RSVPs current.
-- Calendar links resolve by loading the luma.com page and reading `__NEXT_DATA__`.
+- Links resolve by loading the luma.com page and reading `__NEXT_DATA__`: `pageProps.initialData.kind` is `event`
+  or `calendar`, and an event page's `initialData.data` has the same shape as a get-items entry.
+- `GET /event/get?event_api_id=evt-…` is public and answers for private events too (anyone with the link can see
+  them); `get-items` lists only a calendar's public events.
 - If syncing breaks, re-pull luma.com's JS chunks and grep for `get-following-calendars`, `home/get-events`.
 
 ## Partiful
@@ -116,7 +122,8 @@ and private data), it only shows an offline page.
 `GET /api/events` (catalog; ETag/304, gzip) · `GET /api/status` (sources, workers, feeds, prefs) ·
 `POST /api/sync {source?}` · `PUT /api/prefs {muted_calendars?, area?}` · `PUT /api/events/<id>/mark {starred?, hidden?}` ·
 `GET /api/events/<id>/ics` · `GET /feed.ics?scope=mine|all` ·
-`POST /api/luma/import {payload}` · `POST /api/luma/calendars {text}` · `DELETE /api/luma/calendars/<id>` ·
+`POST /api/luma/import {payload}` · `POST /api/luma/links {text}` (calendars and events) · `DELETE /api/luma/calendars/<id>` ·
+`DELETE /api/luma/events/<id>` ·
 `PUT|DELETE /api/luma/session` · `PUT|DELETE /api/luma/ics` · `POST /api/partiful/import {payload}` ·
 `DELETE /api/partiful/accounts/<uid>` · `PUT|DELETE /api/partiful/feed` · `GET /api/health`.
 Writes must be same-origin JSON (Sec-Fetch-Site/Origin checked); the portal in front handles sign-in.

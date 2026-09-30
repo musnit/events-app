@@ -27,7 +27,12 @@ ONLINE_TYPES = {"zoom", "meet", "google_meet", "online", "virtual", "teams", "yo
 GOING_STATUSES = {"approved", "pending_approval", "waitlist", "registered", "going"}
 NOT_CALENDAR_PATHS = {"user", "discover", "signin", "home", "settings", "create", "event", "e", "explore", "pricing",
                       "calendar", "ics", "search", "login"}
-LINK_RE = re.compile(r"(?:https?://)?(?:www\.)?(?:lu\.ma|luma\.com)/([A-Za-z0-9_./-]+)|\b(cal-[A-Za-z0-9]{10,24})\b")
+LINK_RE = re.compile(r"(?:https?://)?(?:www\.)?(?:lu\.ma|luma\.com)/([A-Za-z0-9_./-]+)|\b((?:cal|evt)-[A-Za-z0-9]{10,24})\b")
+EVENT_ID_RE = re.compile(r"\b(evt-[A-Za-z0-9]{10,24})\b")
+# The calendar that holds single events added by link. Luma lists only public events on a calendar, so
+# a private event reaches the app only this way or through your own registrations.
+LINKED_CALENDAR = {"id": "luma-links", "source": "luma", "name": "Luma · events added by link", "slug": None,
+                   "avatar_url": None, "tint_color": "#7c5cff", "url": None, "description": None}
 ORG_WORDS_RE = re.compile(
     r"\b(club|lab|labs|house|society|community|collective|group|network|team|events|inc|co|ventures|capital|"
     r"foundation|institute|university|studio|studios|ai|meetup|commons|hub|school|academy|alliance|association|"
@@ -183,13 +188,14 @@ def normalize_entry(entry: object, *, going_status: str | None = None) -> dict |
     }
 
 
-def calendar_tokens(text: str) -> list[str]:
-    """Pull calendar slugs or cal- ids out of pasted text (links, share sheets, bare ids)."""
+def link_tokens(text: str) -> list[str]:
+    """Pull the slugs, cal- ids and evt- ids of calendars and events out of pasted text (links, share
+    sheets, bare ids)."""
     seen: list[str] = []
     for match in LINK_RE.finditer(text or ""):
         token = (match.group(2) or match.group(1) or "").strip("/").split("?")[0].split("#")[0]
-        embedded = re.search(r"\b(cal-[A-Za-z0-9]{10,24})\b", token)
-        if embedded:  # e.g. luma.com/calendar/manage/cal-…
+        embedded = re.search(r"\b((?:cal|evt)-[A-Za-z0-9]{10,24})\b", token)
+        if embedded:  # e.g. luma.com/calendar/manage/cal-… or luma.com/event/evt-…
             token = embedded.group(1)
         if token and token not in seen:
             seen.append(token)
@@ -343,21 +349,61 @@ class LumaClient:
     def check_session(self, session_key: str) -> None:
         self.call("/home/get-events", {"period": "future", "pagination_limit": 1}, session_key=session_key)
 
+    def event(self, event_id: str, session_key: str | None = None) -> dict:
+        """One event by its evt- id as a listing. Luma answers for private events too: anyone with the
+        link can see them."""
+        listing = normalize_entry(self.call("/event/get", {"event_api_id": event_id}, session_key=session_key))
+        if not listing or listing["id"] != event_id:
+            raise LumaError(200, "unexpected response from /event/get (no event)")
+        return listing
+
+    def resolve_link(self, token: str) -> tuple[str, dict]:
+        """What a slug or id from a pasted link names: ("event", a listing) or ("calendar", a calendar
+        dict). Raises ValueError for anything else."""
+        found = EVENT_ID_RE.search(token)
+        if found:
+            return "event", self.event(found.group(1))
+        if token.startswith("cal-"):
+            return "calendar", self._calendar_by_id(token)
+        slug = token.strip("/")
+        if slug.split("/")[0].lower() in NOT_CALENDAR_PATHS:
+            raise ValueError("not a calendar or event link")
+        props = self._page_props(slug)
+        initial = props.get("initialData") if isinstance(props.get("initialData"), dict) else {}
+        if initial.get("kind") == "event":
+            listing = normalize_entry(initial.get("data"))
+            if not listing:
+                raise ValueError("unreadable event data")
+            return "event", listing
+        found_cals: list[dict] = []
+        find_calendar_objects(props, found_cals)
+        cals = [c for c in (normalize_calendar(f) for f in found_cals) if c]
+        if not cals:
+            raise ValueError("that link is not a Luma calendar or event")
+        # Prefer the calendar whose slug matches the link; else the first one on the page.
+        return "calendar", next((c for c in cals if c["slug"] == slug.split("/")[-1]), cals[0])
+
     def resolve_calendar(self, token: str) -> dict:
         """Turn a slug or cal- id from a pasted link into a calendar dict, or raise ValueError."""
-        first = token.split("/")[0].lower()
-        if first in NOT_CALENDAR_PATHS:
-            raise ValueError("not a calendar link")
-        if token.startswith("cal-"):
-            entries = self.paginated("/calendar/get-items", {"calendar_api_id": token, "period": "future"},
-                                     page_size=1, max_pages=1)
-            for entry in entries:
-                cal = normalize_calendar(entry.get("calendar"))
-                if cal and cal["id"] == token:
-                    return cal
-            return {"id": token, "source": "luma", "name": token, "slug": None, "avatar_url": None,
-                    "tint_color": None, "url": f"{SITE}/{token}", "description": None}
-        slug = token.strip("/")
+        if EVENT_ID_RE.search(token):
+            raise ValueError("that link is an event, not a calendar")
+        kind, found = self.resolve_link(token)
+        if kind != "calendar":
+            raise ValueError("that link is an event, not a calendar")
+        return found
+
+    def _calendar_by_id(self, calendar_id: str) -> dict:
+        entries = self.paginated("/calendar/get-items", {"calendar_api_id": calendar_id, "period": "future"},
+                                 page_size=1, max_pages=1)
+        for entry in entries:
+            cal = normalize_calendar(entry.get("calendar"))
+            if cal and cal["id"] == calendar_id:
+                return cal
+        return {"id": calendar_id, "source": "luma", "name": calendar_id, "slug": None, "avatar_url": None,
+                "tint_color": None, "url": f"{SITE}/{calendar_id}", "description": None}
+
+    def _page_props(self, slug: str) -> dict:
+        """The data luma.com renders a link's page from (its __NEXT_DATA__ page props)."""
         try:
             resp = self._request(f"{SITE}/{urllib.parse.quote(slug)}", headers={"accept": "text/html"})
         except net.HttpError as e:
@@ -367,16 +413,11 @@ class LumaClient:
         match = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', resp.text(), re.S)
         if not match:
             raise ValueError("no page data")
-        found: list[dict] = []
         try:
-            find_calendar_objects(json.loads(match.group(1)).get("props", {}).get("pageProps", {}), found)
-        except ValueError:
+            props = json.loads(match.group(1)).get("props", {}).get("pageProps", {})
+        except (ValueError, AttributeError):
             raise ValueError("unreadable page data") from None
-        cals = [c for c in (normalize_calendar(f) for f in found) if c]
-        if not cals:
-            raise ValueError("that link is not a Luma calendar")
-        # Prefer the calendar whose slug matches the link; else the first one on the page.
-        return next((c for c in cals if c["slug"] == slug.split("/")[-1]), cals[0])
+        return props if isinstance(props, dict) else {}
 
     def personal_feed(self, url: str) -> list[dict]:
         try:

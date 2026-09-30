@@ -15,6 +15,7 @@ from events import net
 from events.config import Settings
 from events.db import Database
 from events.sources import empty_location
+from events.sources.luma import LumaError
 from events.store import Feed, Store
 from events.timeutil import to_iso
 
@@ -112,7 +113,9 @@ class FakeLuma:
         self.mine_result: object = []
         self.feed_result: object = []
         self.session_result: object = None
-        self.resolved: dict[str, object] = {}
+        self.resolved: dict[str, object] = {}  # link token -> calendar | exception
+        self.event_links: dict[str, object] = {}  # link token -> event listing | exception
+        self.single_events: dict[str, object] = {}  # evt- id -> listing | exception | fn(session_key)
 
     def calendar_events(self, calendar_id, session_key=None):
         self.calls.append(("calendar_events", calendar_id, session_key))
@@ -136,7 +139,17 @@ class FakeLuma:
 
     def resolve_calendar(self, token):
         self.calls.append(("resolve_calendar", token))
-        return _answer(self.resolved.get(token, ValueError("not a calendar link")), token)
+        return _answer(self.resolved.get(token, ValueError("not a calendar or event link")), token)
+
+    def resolve_link(self, token):
+        self.calls.append(("resolve_link", token))
+        if token in self.event_links:
+            return "event", _answer(self.event_links[token], token)
+        return "calendar", _answer(self.resolved.get(token, ValueError("not a calendar or event link")), token)
+
+    def event(self, event_id, session_key=None):
+        self.calls.append(("event", event_id, session_key))
+        return _answer(self.single_events.get(event_id, LumaError(404, "no such event")), session_key)
 
 
 class FakePartiful:
