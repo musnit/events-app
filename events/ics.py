@@ -163,7 +163,7 @@ def _stamp(iso: str) -> str:
 
 def build(events: list[dict], *, name: str, now_iso: str) -> str:
     """Write events (catalog shape) as a VCALENDAR."""
-    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//luma-cal//EN", "CALSCALE:GREGORIAN",
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//events//EN", "CALSCALE:GREGORIAN",
              f"X-WR-CALNAME:{escape(name)}"]
     for ev in events:
         if not ev.get("start_at"):
@@ -174,6 +174,7 @@ def build(events: list[dict], *, name: str, now_iso: str) -> str:
             where = "Online"
         presenter = (ev.get("presenter") or {}).get("name")
         desc = "\n".join(x for x in (presenter, ", ".join(h["name"] for h in ev.get("hosts") or []), ev.get("url")) if x)
+        # The UID keeps the app's old name: calendar apps recognise an imported event by it.
         body = ["BEGIN:VEVENT", f"UID:{ev['id']}@luma-cal", f"DTSTAMP:{_stamp(now_iso)}"]
         if ev.get("all_day"):
             start_day = _local_date(ev["start_at"], ev.get("timezone"))

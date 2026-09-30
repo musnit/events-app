@@ -1,4 +1,4 @@
-// Installability and offline state, adapted from the devbox web-app starter.
+// Installability and offline state, adapted from the agent-lab example web app.
 // The service worker never caches app data; see public/sw.js.
 
 const INSTALLED_DISPLAY = "(display-mode: standalone), (display-mode: minimal-ui), (display-mode: fullscreen), (display-mode: window-controls-overlay)";

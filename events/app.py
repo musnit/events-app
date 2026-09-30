@@ -5,6 +5,7 @@ import logging
 import signal
 import sys
 import threading
+from pathlib import Path
 
 from . import __version__, legacy
 from .catalog import Catalog
@@ -14,17 +15,32 @@ from .store import Store
 from .sync import Sync
 from .web import App, make_server
 
-log = logging.getLogger("lumacal")
+log = logging.getLogger("events")
+
+DB_NAME = "events.db"
+
+
+def adopt_old_database(state_dir: Path) -> None:
+    """Version 2.0 called its database lumacal.db. Rename it (and its WAL files) once, while closed."""
+    old, new = state_dir / "lumacal.db", state_dir / DB_NAME
+    if old.is_file() and not new.exists():
+        for suffix in ("", "-wal", "-shm"):
+            source = Path(f"{old}{suffix}")
+            if source.exists():
+                source.rename(f"{new}{suffix}")
+        log.info("renamed %s to %s", old.name, new.name)
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, stream=sys.stderr, format="%(levelname)s %(name)s: %(message)s")
     settings = Settings.from_env()
-    db = Database(settings.data_dir / "lumacal.db")
+    adopt_old_database(settings.state_dir)
+    db = Database(settings.state_dir / DB_NAME)
     db.migrate()
     store = Store(db)
     sync = Sync(store, settings)
-    legacy.migrate(store, sync, settings.root, settings.data_dir)
+    if settings.legacy_dir:
+        legacy.migrate(store, sync, settings.legacy_dir, settings.state_dir)
     app = App(settings, store, sync, Catalog(store))
     server = make_server(app, settings.host, settings.port)
 
@@ -38,11 +54,11 @@ def main() -> None:
         sync.start()
     else:
         sync.reconcile()
-        log.info("background sync is off (LUMACAL_SYNC=0)")
+        log.info("background sync is off (EVENTS_SYNC=0)")
     if not (settings.web_dir / "index.html").is_file():
         log.warning("no built web app at %s; run: npm --prefix web ci && npm --prefix web run build", settings.web_dir)
     host, port = server.server_address[:2]
-    log.info("luma-cal %s listening on %s:%s (data in %s)", __version__, host, port, settings.data_dir)
+    log.info("events %s listening on %s:%s (state in %s)", __version__, host, port, settings.state_dir)
     try:
         server.serve_forever(poll_interval=0.5)
     finally:

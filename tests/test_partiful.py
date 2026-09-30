@@ -1,9 +1,9 @@
 import base64
 import unittest
 
-from lumacal import net
-from lumacal.sources import partiful
-from lumacal.sources.partiful import PartifulClient, PartifulError
+from events import net
+from events.sources import partiful
+from events.sources.partiful import PartifulClient, PartifulError
 
 from .helpers import NOW, FakeClock, FakeRequest, jwt, response
 

@@ -1,6 +1,6 @@
 import unittest
 
-from lumacal import categorize
+from events import categorize
 
 
 def vibes(name: str, **fields) -> list[str]:

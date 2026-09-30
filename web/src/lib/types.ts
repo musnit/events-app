@@ -1,4 +1,4 @@
-// Shapes returned by the Python API (see lumacal/catalog.py and lumacal/web.py).
+// Shapes returned by the Python API (see events/catalog.py and events/web.py).
 
 export type Source = "luma" | "partiful" | "agihouse";
 export type Area = "bay" | "online" | "elsewhere" | "unknown";

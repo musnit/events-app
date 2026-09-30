@@ -2,9 +2,9 @@ import json
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from lumacal import ics
-from lumacal.sources import luma
-from lumacal.timeutil import canonical, parse_iso, to_iso
+from events import ics
+from events.sources import luma
+from events.timeutil import canonical, parse_iso, to_iso
 
 CRLF = "\r\n"
 
@@ -193,7 +193,7 @@ class IcsBuildTest(unittest.TestCase):
                                      hosts=[{"name": "Big Brain Bay Area"}, {"name": "Jordan Rivera"}]),
                           name="My events · Luma, Partiful")
         lines = text.split(CRLF)
-        self.assertEqual(lines[:4], ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//luma-cal//EN", "CALSCALE:GREGORIAN"])
+        self.assertEqual(lines[:4], ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//events//EN", "CALSCALE:GREGORIAN"])
         self.assertIn(r"X-WR-CALNAME:My events · Luma\, Partiful", lines)
         for expected in ("UID:evt-1@luma-cal", "DTSTAMP:20260929T120000Z", "DTSTART:20260930T020000Z",
                          "DTEND:20260930T040000Z", r"SUMMARY:Sex\, AI\; and more", "URL:https://luma.com/nmvb841b"):

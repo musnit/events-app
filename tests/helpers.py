@@ -11,12 +11,12 @@ from datetime import datetime, timezone
 from email.message import Message
 from pathlib import Path
 
-from lumacal import net
-from lumacal.config import Settings
-from lumacal.db import Database
-from lumacal.sources import empty_location
-from lumacal.store import Feed, Store
-from lumacal.timeutil import to_iso
+from events import net
+from events.config import Settings
+from events.db import Database
+from events.sources import empty_location
+from events.store import Feed, Store
+from events.timeutil import to_iso
 
 FIXTURES = Path(__file__).parent / "fixtures"
 NOW = datetime(2026, 9, 29, 12, 0, tzinfo=timezone.utc).timestamp()
@@ -56,13 +56,13 @@ def fixture(name: str) -> object:
 
 
 def temp_dir(test: unittest.TestCase) -> Path:
-    tmp = tempfile.TemporaryDirectory(prefix="lumacal-test-")
+    tmp = tempfile.TemporaryDirectory(prefix="events-test-")
     test.addCleanup(tmp.cleanup)
     return Path(tmp.name)
 
 
 def make_settings(root: Path, **env: str) -> Settings:
-    values = {"LUMACAL_ROOT": str(root), "LUMACAL_WEB_DIR": str(root / "web"), "LUMACAL_SYNC": "0"}
+    values = {"EVENTS_STATE_DIR": str(root / "state"), "EVENTS_WEB_DIR": str(root / "web"), "EVENTS_SYNC": "0"}
     values.update(env)
     return Settings.from_env(values)
 
@@ -181,7 +181,7 @@ def jwt(claims: dict) -> str:
 
 def listing(event_id: str, *, name: str = "Community Meetup", source: str = "luma", start: str | None = None,
             end: str | None = None, **fields) -> dict:
-    """A listing dict in the shape every source produces (see lumacal.sources)."""
+    """A listing dict in the shape every source produces (see events.sources)."""
     start = start or iso(24)
     ev = {
         "id": event_id, "source": source, "name": name, "url": f"https://luma.com/{event_id}",
@@ -218,10 +218,10 @@ def feed(key: str = "luma:cal-aaaaaaaaaaaa", **fields) -> Feed:
 # ---------- raw HTTP through the real handler, without sockets ----------
 
 def serve_raw(app, raw: bytes) -> tuple[int, Message, bytes]:
-    """Feed one raw HTTP request to lumacal.web's handler class and parse what it writes back."""
+    """Feed one raw HTTP request to events.web's handler class and parse what it writes back."""
     from http.client import parse_headers
 
-    from lumacal import web
+    from events import web
 
     handler_cls = type("TestHandler", (web._Handler,), {"app": app})
     handler = handler_cls.__new__(handler_cls)

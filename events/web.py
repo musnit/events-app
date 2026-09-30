@@ -262,7 +262,8 @@ class App:
                 "session_notice": self.store.get_meta("luma_session_notice") if not session else None,
                 "ics": mask((ics_cfg or {}).get("url")),
                 "calendars": len(luma_cals),
-                "calendars_by_origin": {o: sum(1 for c in luma_cals if o in c["origins"]) for o in ("followed", "import", "link")},
+                "calendars_by_origin": {o: sum(1 for c in luma_cals if o in c["origins"])
+                                        for o in ("followed", "import", "link", "config")},
                 "going_snapshot": sum(1 for _ in self.store.going()),
             },
             "partiful": {"accounts": accounts, "feed": mask((feed_cfg or {}).get("url"))},
@@ -340,6 +341,11 @@ class App:
         cal = self.store.calendar(calendar_id)
         if cal is None or cal["source"] != "luma":
             raise ApiError(404, "no such Luma calendar")
+        # Only what was added here can be removed here; your Luma follows and the configuration keep theirs.
+        kept = [o for o in cal["origins"] if o in ("followed", "config")]
+        if kept:
+            raise ApiError(409, "this calendar comes from " + " and ".join(
+                {"followed": "your Luma follows", "config": "the app's configuration"}[o] for o in kept))
         self.store.remove_calendar(calendar_id)
         self.sync.sources_changed()
         return json_response({"ok": True})
@@ -494,7 +500,7 @@ def _with_base(html: bytes, prefix: str | None) -> bytes:
 
 class _Handler(BaseHTTPRequestHandler):
     app: App
-    server_version = "luma-cal"
+    server_version = "events"
     sys_version = ""
     protocol_version = "HTTP/1.1"
 

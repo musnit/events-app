@@ -1,6 +1,6 @@
 import unittest
 
-from lumacal.sources import agihouse
+from events.sources import agihouse
 
 from .helpers import FakeRequest, response
 

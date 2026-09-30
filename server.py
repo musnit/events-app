@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Entry point. Kept at the repository root so the service command stays `python3 server.py`.
+"""Start the server from a checkout: ``python3 server.py`` (the same as ``python3 -m events``).
 
-Environment: HOST and PORT (default 127.0.0.1:8771), LUMACAL_DATA_DIR (default ./data),
-LUMACAL_WEB_DIR (default ./web/dist), LUMACAL_SYNC=0 to run without background sync.
-See AGENTS.md for the rest.
+Settings are EVENTS_* environment variables; see README.md. From a checkout the built web app in
+web/dist is served, and state goes to EVENTS_STATE_DIR (default ~/.local/state/events).
 """
-from lumacal.app import main
+from events.app import main
 
 if __name__ == "__main__":
     main()

@@ -9,7 +9,7 @@ import urllib.request
 from dataclasses import dataclass
 from email.message import Message
 
-USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) luma-cal/2.0"
+USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) events/2.1"
 MAX_BYTES = 25 * 1024 * 1024
 
 

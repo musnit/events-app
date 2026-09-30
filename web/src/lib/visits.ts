@@ -1,6 +1,7 @@
 // "New since your last visit": the reference moment only moves forward when a new visit starts,
 // so badges stay put while you browse and clear the next time you come back.
 
+// The key keeps the app's old name so existing visit history carries over.
 const KEY = "lumacal.visit";
 const NEW_VISIT_AFTER_MS = 30 * 60_000;
 

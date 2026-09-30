@@ -5,7 +5,7 @@ tags, but no descriptions. Keyword rules over those fields are transparent, fast
 Each field has a weight; a category needs a score of THRESHOLD, so one strong hit in the title is
 enough, while the presenting calendar alone needs two signals.
 
-To tune: run ``python3 -m lumacal.categorize data/lumacal.db`` to print coverage and samples.
+To tune: run ``python3 -m events.categorize data/events.db`` to print coverage and samples.
 """
 from __future__ import annotations
 
@@ -296,7 +296,7 @@ if __name__ == "__main__":  # coverage report for tuning the rules against real 
     from .db import Database
     from .store import Store
 
-    store = Store(Database(sys.argv[1] if len(sys.argv) > 1 else "data/lumacal.db"))
+    store = Store(Database(sys.argv[1] if len(sys.argv) > 1 else "data/events.db"))
     events = Catalog(store).build()["events"]
     vibe_counts = collections.Counter(v for e in events for v in e["vibes"])
     topic_counts = collections.Counter(t for e in events for t in e["topics"])

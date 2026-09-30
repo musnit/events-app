@@ -1,0 +1,4 @@
+# Left out of the copy scripts/lab-export.sh makes for agent-lab: notes and tools for this repository.
+/AGENTS.md export-ignore
+/scripts export-ignore
+/.gitattributes export-ignore

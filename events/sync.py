@@ -13,6 +13,7 @@ resumes from each feed's own timestamps. A 429 from Luma pauses the Luma worker 
 from __future__ import annotations
 
 import itertools
+import json
 import logging
 import sqlite3
 import threading
@@ -29,6 +30,8 @@ from .store import Feed, Store
 log = logging.getLogger(__name__)
 
 USER, NEW, SCHEDULED = 0, 1, 2
+CONFIG_FEED = "luma:config"
+CONFIG_NEVER_STALE = 10 * 365 * 86400
 RATE_LIMIT_PAUSES = (45, 90, 180, 300)
 IDLE_CHECK_S = 60
 LUMA_MINE = {"id": "luma-mine", "source": "luma", "name": "Luma · my registrations", "slug": None, "avatar_url": None,
@@ -217,10 +220,12 @@ class Sync:
         self.clock = clock
         self._reconcile_lock = threading.Lock()
         intervals = {
-            "calendar": settings.luma_refresh, "luma-following": settings.personal_refresh,
-            "luma-mine": settings.personal_refresh, "luma-ics": settings.personal_refresh,
-            "partiful-mine": settings.partiful_refresh, "partiful-following": settings.partiful_refresh,
-            "partiful-feed": settings.partiful_refresh, "agihouse": settings.agihouse_refresh,
+            "calendar": settings.luma_interval, "luma-following": settings.personal_interval,
+            "luma-mine": settings.personal_interval, "luma-ics": settings.personal_interval,
+            "partiful-mine": settings.partiful_interval, "partiful-following": settings.partiful_interval,
+            "partiful-feed": settings.partiful_interval, "agihouse": settings.agihouse_interval,
+            # Resolved once; start() makes it due again whenever the configured list changes.
+            "luma-config": CONFIG_NEVER_STALE,
         }
         self.intervals = intervals
         self.workers: dict[str, Worker] = {}
@@ -235,10 +240,20 @@ class Sync:
 
     def start(self) -> None:
         self.reconcile()
+        self._apply_configured_list()
         for worker in self.workers.values():
             worker.start()
         self._housekeeping = threading.Thread(target=self._housekeep, name="sync-housekeeping", daemon=True)
         self._housekeeping.start()
+
+    def _apply_configured_list(self) -> None:
+        """A changed EVENTS_LUMA_CALENDARS is resolved again at once; an unchanged list keeps its
+        schedule, including the backoff of a link that could not be resolved."""
+        configured = json.dumps(list(self.settings.luma_calendars))
+        if self.store.get_meta("luma_config_tokens") != configured:
+            if self.store.feed(CONFIG_FEED):
+                self.store.reset_feed(CONFIG_FEED)
+            self.store.set_meta("luma_config_tokens", configured)
 
     def stop(self) -> None:
         self._stopping.set()
@@ -299,8 +314,17 @@ class Sync:
             if feed_cfg:
                 wanted["partiful:feed"] = {"source": "partiful", "kind": "partiful-feed",
                                            "calendar_id": partiful_src.MINE_CALENDAR["id"], "label": "Partiful · iCal link"}
-            store.upsert_calendar(agihouse_src.CALENDAR, "builtin")
-            wanted["agihouse"] = {"source": "agihouse", "kind": "agihouse", "calendar_id": "agihouse", "label": "AGI House"}
+            if self.settings.agihouse:
+                store.upsert_calendar(agihouse_src.CALENDAR, "builtin")
+                wanted["agihouse"] = {"source": "agihouse", "kind": "agihouse", "calendar_id": "agihouse",
+                                      "label": "AGI House"}
+            else:
+                store.remove_calendar(agihouse_src.CALENDAR["id"], "builtin")
+            if self.settings.luma_calendars:
+                wanted[CONFIG_FEED] = {"source": "luma", "kind": "luma-config", "calendar_id": None,
+                                       "label": "Luma · calendars from configuration"}
+            else:
+                store.set_origin_calendars("config", [])
 
             for key in before - set(wanted):
                 store.delete_feed(key)
@@ -346,7 +370,7 @@ class Sync:
         if feed.last_ok_at is None:
             # Never pulled. If an attempt started and never finished (crash), wait a little.
             return feed.last_attempt_at is None or now - feed.last_attempt_at >= 300
-        return now - feed.last_ok_at >= self.intervals.get(feed.kind, self.settings.luma_refresh)
+        return now - feed.last_ok_at >= self.intervals.get(feed.kind, self.settings.luma_interval)
 
     def _due_for(self, source: str) -> Callable[[float], list[Feed]]:
         def due(now: float) -> list[Feed]:
@@ -364,6 +388,7 @@ class Sync:
         self.store.mark_attempt(feed.key)
         handler = {
             "calendar": self._pull_luma_calendar, "luma-following": self._pull_luma_following,
+            "luma-config": self._pull_luma_config,
             "luma-mine": self._pull_luma_mine, "luma-ics": self._pull_luma_ics,
             "partiful-mine": self._pull_partiful, "partiful-following": self._pull_partiful,
             "partiful-feed": self._pull_partiful_feed, "agihouse": self._pull_agihouse,
@@ -390,6 +415,38 @@ class Sync:
         self.store.set_meta("luma_session_notice", "Luma signed this app out. Paste a fresh session cookie to keep syncing your follows.")
         self.reconcile()
 
+    def _pull_luma_config(self, feed: Feed) -> None:
+        """Follow the calendars named in EVENTS_LUMA_CALENDARS. A cal- id stands on its own, so it is
+        followed even when Luma cannot be reached; its name fills in on its first pull. A link or slug
+        must be resolved, and one that fails is retried with the feed's backoff."""
+        tokens = [(luma_src.calendar_tokens(t) or [t])[0] for t in self.settings.luma_calendars]
+        try:
+            resolved = json.loads(self.store.get_meta("luma_config_resolved") or "{}")
+        except ValueError:
+            resolved = {}
+        failed = []
+        try:
+            for token in tokens:
+                if token in resolved:
+                    continue
+                try:
+                    resolved[token] = self._luma_call(lambda: self.luma.resolve_calendar(token))
+                except (ValueError, luma_src.LumaError) as e:
+                    if token.startswith("cal-"):
+                        resolved[token] = {"id": token, "source": "luma", "name": token, "slug": None, "avatar_url": None,
+                                           "tint_color": None, "url": f"{luma_src.SITE}/{token}", "description": None}
+                    else:
+                        failed.append(f"{token} ({e})")
+        finally:
+            # Keep what was resolved even when Luma rate-limits us part way; the retry resumes.
+            resolved = {t: cal for t, cal in resolved.items() if t in tokens}
+            self.store.set_meta("luma_config_resolved", json.dumps(resolved))
+        self.store.set_origin_calendars("config", list(resolved.values()))
+        self._enqueue(self.reconcile(), NEW)
+        if failed:
+            raise ValueError("could not resolve " + "; ".join(failed))
+        self.store.record_success(feed.key, len(resolved))
+
     def _pull_luma_calendar(self, feed: Feed) -> None:
         calendar_id = feed.calendar_id or feed.key.split(":", 1)[1]
         key = self._luma_session()
@@ -401,6 +458,10 @@ class Sync:
             self._drop_luma_session()
             events = self._luma_call(lambda: self.luma.calendar_events(calendar_id, None))
         self.store.replace_listings(feed.key, events)  # type: ignore[arg-type]
+        # The calendar's own events carry its current name and picture (a calendar added by id has neither).
+        own = next((e["presenter"] for e in events if (e.get("presenter") or {}).get("id") == calendar_id), None)  # type: ignore[union-attr]
+        if own:
+            self.store.update_calendar_details(own)
 
     def _pull_luma_following(self, feed: Feed) -> None:
         key = self._luma_session()

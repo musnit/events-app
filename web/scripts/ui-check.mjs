@@ -3,13 +3,13 @@
 //
 //   BROWSER_BIN=/path/to/chromium BASE_URL=http://127.0.0.1:8771/ npm run check:ui
 //
-// Optional: OUT_DIR (default /tmp/lumacal-ui), ONLY=phone|desktop|tablet, PAGES=comma list of page names.
+// Optional: OUT_DIR (default /tmp/events-ui), ONLY=phone|desktop|tablet, PAGES=comma list of page names.
 
 import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright-core";
 
 const BASE = process.env.BASE_URL ?? "http://127.0.0.1:8771/";
-const OUT = process.env.OUT_DIR ?? "/tmp/lumacal-ui";
+const OUT = process.env.OUT_DIR ?? "/tmp/events-ui";
 const BIN = process.env.BROWSER_BIN;
 if (!BIN) {
   console.error("Set BROWSER_BIN to a Chromium executable.");
