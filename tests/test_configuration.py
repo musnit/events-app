@@ -1,5 +1,5 @@
-"""Deployment-time configuration: calendars named in EVENTS_LUMA_CALENDARS, turning AGI House off,
-the database's old name, and calendar details filled in from pulls."""
+"""These tests cover deployment-time configuration: calendars named in EVENTS_LUMA_CALENDARS, turning
+AGI House off, the database's old name, and calendar details filled in from pulls."""
 import json
 import unittest
 

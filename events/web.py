@@ -1,4 +1,4 @@
-"""HTTP: the JSON API, calendar exports and the built web app.
+"""The HTTP server serves the JSON API, calendar exports and the built web app.
 
 The portal in front of the app handles sign-in, so every request here is the owner. Mutating
 requests must still be same-origin JSON, which blocks cross-site form posts and image tricks.

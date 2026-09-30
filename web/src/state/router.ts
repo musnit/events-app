@@ -10,7 +10,7 @@ export interface AppLocation {
   search: string;
   route: Route;
   filters: Filters;
-  /** For an event opened over a list: the list's relative URL, drawn underneath. */
+  /** An event opened over a list keeps the list's relative URL here, and the list is drawn underneath. */
   background: string | null;
   key: string;
 }
@@ -90,7 +90,7 @@ export function navigate(to: string, options: NavigateOptions = {}): void {
   if (!options.keepScroll && !options.background && !options.replace) window.scrollTo(0, 0);
 }
 
-/** Close an overlay: go back if we came from inside the app, otherwise go to ``fallback``. */
+/** Closes an overlay by going back when we came from inside the app, and otherwise goes to ``fallback``. */
 export function goBack(fallback: string): void {
   if (current.background !== null && history.length > 1) history.back();
   else navigate(fallback, { replace: true });

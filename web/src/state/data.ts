@@ -1,4 +1,4 @@
-// App data: the event catalog and sync status, polled from the API. Components read it through
+// The app's data is the event catalog and sync status, polled from the API. Components read it through
 // useData(); mutations update optimistically and roll back on failure.
 
 import { useSyncExternalStore } from "react";
@@ -195,7 +195,7 @@ class DataStore {
     }
   }
 
-  /** After changing sources: refresh soon and keep polling quickly while the sync starts. */
+  /** Call after changing sources: it refreshes soon and keeps polling quickly while the sync starts. */
   async afterSourcesChanged(): Promise<void> {
     this.dataVersion = null;
     await this.poll();

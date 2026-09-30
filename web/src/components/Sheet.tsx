@@ -3,7 +3,7 @@ import { Icon } from "./Icon.tsx";
 
 const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex='-1'])";
 
-/** A modal panel: bottom sheet on phones, side or centered panel on wide screens. Traps focus, closes on Escape. */
+/** Shows a modal panel, a bottom sheet on phones and a side or centered panel on wide screens. It traps focus and closes on Escape. */
 export function Sheet({ label, onClose, children, side = "right", footer }: {
   label: string;
   onClose: () => void;

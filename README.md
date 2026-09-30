@@ -1,6 +1,6 @@
 ---
-title: Events from the calendars you follow
-description: One calendar of the upcoming events from the Luma calendars you follow, your Partiful events and AGI House, sorted by vibe and topic.
+title: Find events from the calendars you follow
+description: See the upcoming events from the Luma calendars you follow, your Partiful invites and AGI House in one calendar, sorted by vibe and topic.
 ---
 
 Events gathers every upcoming event from the Luma calendars you follow,
@@ -22,20 +22,20 @@ Luma's public API covers only calendars you manage, and Partiful has no
 API, so the app reads the endpoints their own websites use. Connect them
 on the **Sources** page:
 
-- **Luma follows.** Drag the Luma bookmarklet to your bookmarks bar, open
-  luma.com signed in and click it. It sends the calendars you follow and
-  the events you registered for. Run it again after following new
-  calendars; calendars you unfollowed drop out.
-- **Luma, kept current.** Your personal Luma iCal link (Luma → Settings →
-  Calendar Syncing) keeps your RSVPs up to date between imports. On a
-  computer you can instead paste your Luma session cookie, and the app
-  then reads your follows and RSVPs itself.
-- **Partiful.** The Partiful bookmarklet, clicked on partiful.com while
-  signed in, connects your account: your invites, RSVPs and the events of
-  people you follow. Several accounts can be connected. Partiful's iCal
-  link is an alternative with invites and RSVPs only.
-- **Any Luma calendar.** Paste calendar links under **Add single
-  calendars by link** to follow them without a Luma account.
+- To import the Luma calendars you follow, drag the Luma bookmarklet to
+  your bookmarks bar, open luma.com while signed in and click it. It sends
+  the calendars you follow and the events you registered for. Run it
+  again after following new calendars; calendars you unfollowed drop out.
+- Your personal Luma iCal link (Luma → Settings → Calendar Syncing) keeps
+  your RSVPs current between imports. On a computer you can instead paste
+  your Luma session cookie, and the app then reads your follows and RSVPs
+  itself.
+- The Partiful bookmarklet, clicked on partiful.com while signed in,
+  connects your account: your invites, your RSVPs and the events of people
+  you follow. You can connect several accounts. Partiful's iCal link is an
+  alternative that carries invites and RSVPs only.
+- To follow any Luma calendar without a Luma account, paste its link under
+  **Add single calendars by link**.
 
 The deployment can also name calendars that are always followed
 (`EVENTS_LUMA_CALENDARS`, `services.events.lumaCalendars`,
@@ -51,12 +51,13 @@ error when it did not.
 
 ## Authentication and access
 
-The app has no sign-in of its own and must sit behind one: it binds to
-loopback, and a reverse proxy that authenticates every request fronts it.
-In the lab that is the portal. Its door admits the admins alone. Set
-`lab.proxy.apps.events.groups` to let a directory group in. There are no
-per-person accounts: the app shows one person's calendars, and everyone
-it admits sees and changes the same connections and choices.
+The app has no sign-in of its own, so it binds to loopback behind a
+reverse proxy that authenticates every request. In the lab that proxy is
+the door, the box's front web server: it sends every visitor through the
+portal sign-in and admits the admins alone. Set
+`lab.proxy.apps.events.groups` to admit a directory group as well. The
+app has no per-person accounts. It shows one person's calendars, and
+everyone it admits sees and changes the same connections and choices.
 
 Writes must come from the app's own pages: the server refuses
 cross-site requests and anything but JSON. **Export** on the Sources
@@ -75,7 +76,7 @@ masked. Removing a connection on the Sources page deletes its
 credential. In the lab the database is `lab.events.dataDir`
 (`/persist/events`), encrypted and backed up with the rest of the box's
 state. A new box starts empty: run the bookmarklets once against it, or
-restore the directory.
+restore the directory from its backup.
 
 ## Limits
 
@@ -92,7 +93,8 @@ restore the directory.
 
 ## Configuration
 
-Environment only, the same names in every runtime:
+The program reads its settings from the environment, with the same names
+in every runtime:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -110,12 +112,12 @@ Environment only, the same names in every runtime:
 | `EVENTS_MANUAL_SPACING` | `2` | seconds between Luma requests you asked for |
 | `EVENTS_LEGACY_DIR` | *(none)* | import a version 1 install's JSON files from here, once |
 
-Routes: the app at every extensionless path, `/api/health`, the JSON API
-under `/api/`, `/feed.ics?scope=mine|all`.
+The server answers with the app at every extensionless path, and with
+`/api/health`, the JSON API under `/api/` and `/feed.ics?scope=mine|all`.
 
 ## Run it
 
-From a checkout, with Python 3.11+ and Node 22.12+:
+A checkout runs with Python 3.11+ and Node 22.12+:
 
 ```sh
 npm --prefix web ci && npm --prefix web run build
@@ -124,7 +126,7 @@ python3 server.py        # http://127.0.0.1:8771, or python3 -m events
 
 With Nix, `nix run .` runs the package, whose build runs both test
 suites, and `nix flake check` also boots the NixOS module in a VM. On
-NixOS:
+NixOS, import the module:
 
 ```nix
 imports = [ inputs.events.nixosModules.default ];
@@ -141,16 +143,16 @@ other `EVENTS_*` setting.
 ## Files
 
 ```
-events/               the server: Python standard library only
-web/                  the web app: React, TypeScript, Vite; npm lockfile committed
-tests/                the server's tests (offline; upstreams are faked)
-server.py             `python3 server.py` from a checkout
-package.nix           how Nix builds it, offline, running both test suites
-module.nix            NixOS: services.events → a sandboxed systemd unit
-standalone-test.nix   VM test of module.nix alone (the flake's vm check)
-flake.nix             the standalone entry point
-default.nix           the lab's wiring: lab.events → endpoint, door, state
-test.nix              the lab's VM test, run by agent-lab's flake check
+events/               the server, written with Python's standard library only
+web/                  the web app in React, TypeScript and Vite, with its npm lockfile
+tests/                the server's tests, which fake every upstream and run offline
+server.py             the entry point that runs the server from a checkout
+package.nix           the Nix build, offline, which runs both test suites
+module.nix            the NixOS module services.events, a sandboxed systemd unit
+standalone-test.nix   the VM test of module.nix alone (the flake's vm check)
+flake.nix             the standalone flake
+default.nix           the lab's wiring of lab.events to an endpoint, the door and state
+test.nix              the lab's VM test, which agent-lab's flake check runs
 ```
 
 `default.nix` and `test.nix` are evaluated only inside agent-lab, where

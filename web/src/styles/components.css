@@ -1,4 +1,4 @@
-/* Screens and their parts: event cards and lists, month grid, event detail, filters, sources. */
+/* These rules style the screens and their parts: event cards and lists, the month grid, event detail, filters and sources. */
 
 [data-vibe="party"] { --vibe: var(--vibe-party); }
 [data-vibe="social"] { --vibe: var(--vibe-social); }

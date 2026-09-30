@@ -1,4 +1,4 @@
-"""Outbound HTTP: timeouts, one user agent, a size cap, and errors that never echo secret URLs."""
+"""Outbound requests use timeouts, one user agent and a size cap, and their errors never echo secret URLs."""
 from __future__ import annotations
 
 import json

@@ -1,4 +1,4 @@
-/* The frame: sidebar on wide screens, bottom tab bar on phones, sticky page headers, sheets. */
+/* The frame has a sidebar on wide screens and a bottom tab bar on phones, with sticky page headers and sheets. */
 
 .shell { min-height: 100dvh; }
 .main-column { min-width: 0; }

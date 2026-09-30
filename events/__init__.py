@@ -1,4 +1,5 @@
-"""events: one calendar of the Luma calendars you follow, your Partiful events and AGI House.
+"""The events app gathers the events of the Luma calendars you follow, your Partiful events and AGI House
+into one calendar.
 
 The package is split by responsibility:
 

@@ -14,7 +14,7 @@ import { useView } from "../state/view.ts";
 import { useFilteredEvents, useNow } from "../state/hooks.ts";
 import { LoadingCards, NoEvents } from "./common.tsx";
 
-/** Your plan: events you're going to or saved, wherever they are. */
+/** Lists your plan, the events you're going to or saved, wherever they are. */
 export function SavedView() {
   const { route, filters } = useView();
   const { catalog, loading } = useData();

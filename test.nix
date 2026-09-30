@@ -1,12 +1,13 @@
-# The lab's events on one box: from empty state the app is ready behind the door with no one
-# setting it up. The configured Luma calendar is followed, the database lives on persistent storage
-# where only the unit can read it, every request needs the portal sign-in, and the app's own writes
-# work through the door. A restart keeps what was chosen in the app. The VM has no internet, so
-# pulls fail and back off; a stand-in answers the door's questions the way the portal does.
+# This test boots one box with the events app behind the door. From empty state the app is ready
+# with no one setting it up: it follows the configured Luma calendar, keeps its database on
+# persistent storage where only the unit can read it, answers only signed-in requests, and accepts
+# its own writes through the door. A restart keeps what was chosen in the app. The VM has no
+# internet, so pulls fail and back off; a stand-in answers the door's questions the way the portal
+# does.
 { ... }:
 let
-  # The portal's authz contract: 401 with the sign-in address unless the request carries
-  # X-Test-Auth, then 200 with the signed-in identity.
+  # The stand-in answers like the portal's authz endpoint: 401 with the sign-in address, or 200
+  # with the signed-in identity when the request carries X-Test-Auth.
   stubPortal =
     pkgs:
     pkgs.writeText "stub-portal.py" ''
@@ -58,7 +59,7 @@ in
         wantedBy = [ "multi-user.target" ];
         serviceConfig.ExecStart = "${pkgs.python3}/bin/python3 ${stubPortal pkgs}";
       };
-      # an ordinary login on the box, which must not read the database either
+      # An ordinary login on the box must not read the database either.
       users.users.someone.isNormalUser = true;
       environment.systemPackages = [ pkgs.curl ];
     };
@@ -106,7 +107,7 @@ in
 
       with subtest("signed in, the app and its writes work through the door"):
           assert "<title>Events</title>" in through_door("/month/2026-10")
-          # a browser's same-origin write, and one from an older browser that sends Origin alone
+          # A browser labels its writes with Sec-Fetch-Site; an older browser sends Origin alone.
           for headers in ["-H 'Sec-Fetch-Site: same-origin'", f"-H 'Origin: {site}'"]:
               out = through_door("/api/prefs", "-X PUT", headers, "-H 'Content-Type: application/json'",
                                  "-o /dev/null -w '%{http_code}'", "--data '{\"area\": \"all\"}'")

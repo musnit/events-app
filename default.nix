@@ -1,12 +1,12 @@
-# events — one calendar of the upcoming events from the Luma calendars you follow, your Partiful
-# events and AGI House, with vibe and topic filters. The program, its package, the generic module
-# (services.events, module.nix) and a standalone flake sit beside this file; this half is a lab's
-# wiring around them: an endpoint in the address book, a vhost behind the door and the database on
-# persistent storage. Evaluated only inside agent-lab (public/modules/events/).
+# The events app gathers the upcoming events from the Luma calendars you follow, your Partiful
+# events and AGI House into one calendar, with vibe and topic filters. The program, its package,
+# the generic module (services.events, module.nix) and a standalone flake sit beside this file.
+# This file adds the lab's wiring around them: an endpoint in the address book, a vhost behind the
+# door and the database on persistent storage.
 #
 # The app has no login of its own and keeps personal credentials in its database (a Luma session,
-# Partiful tokens, private calendar links), so every request passes the portal sign-in and the door
-# admits the admins alone unless lab.proxy.apps.events.groups adds a group.
+# Partiful tokens, private calendar links). Every request therefore passes the portal sign-in, and
+# the door admits the admins alone unless lab.proxy.apps.events.groups adds a group.
 #
 #   lab.events.enable          run it
 #   lab.events.port            its loopback port

@@ -238,7 +238,8 @@ def _pick(categories: tuple[Category, ...], fields: dict[str, str]) -> list[str]
     return [cid for _, _, cid in chosen[:MAX_PER_KIND]]
 
 
-# Talk-shaped titles: a question, a named speaker ("with Jane Doe", "by Jane Doe"), "w/ …", "Topic: subtitle".
+# A talk-shaped title asks a question, names a speaker ("with Jane Doe", "by Jane Doe"), uses "w/ …" or reads
+# "Topic: subtitle".
 TALK_HINTS = re.compile(r"\?(?:\s|$)|\bwith (?:dr|prof|professor)\b\.?|(?:^|\s)w/\s|\bfeat(?:uring)?\.?\s|\bft\.\s|\w: \w", re.I)
 SPEAKER = re.compile(r"\b(?:with|by) (?:[A-Z][\w.'-]+ ){1,2}[A-Z][\w'-]+")
 # Room holds and private bookings that calendars publish but nobody can attend.
@@ -256,7 +257,7 @@ def _pick_vibes(fields: dict[str, str]) -> list[str]:
     vibes = _pick(VIBES, fields)
     if vibes:
         return vibes
-    # Nothing strong: accept the single best weak signal, counting talk-shaped titles toward "learn".
+    # With no strong signal, the single best weak one wins, and talk-shaped titles count toward "learn".
     talk = bool(TALK_HINTS.search(fields["title"]) or SPEAKER.search(fields["title"]) or CONFERENCE.search(fields["title"]))
     scored = [(c.score(fields) + (FIELD_WEIGHTS["title"] / 2 if c.id == "learn" and talk else 0),
                -SPECIFICITY.get(c.id, 99), c.id) for c in VIBES]

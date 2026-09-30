@@ -1,5 +1,5 @@
-# The Nix package: the server (Python, standard library only) and the web app it serves, built
-# offline from this directory with both test suites. `nix build` here; a NixOS module or a lab
+# This package builds the server (Python, standard library only) and the web app it serves offline
+# from this directory, and runs both test suites. `nix build` builds it here; a NixOS module or a lab
 # imports it by path with pkgs.callPackage.
 {
   lib,
@@ -11,7 +11,7 @@
 let
   version = "2.1.0";
 
-  # The browser app: type-checked, unit-tested and bundled from the locked npm dependencies.
+  # The web app is type-checked, unit-tested and bundled from the locked npm dependencies.
   web = buildNpmPackage {
     pname = "events-web";
     inherit version;
@@ -62,7 +62,7 @@ stdenvNoCC.mkDerivation {
     mkdir -p $out/lib $out/bin
     cp -r events $out/lib/
     ${python3}/bin/python3 -m compileall -q $out/lib/events
-    # -P: never import from the working directory, which may hold a checkout's copy.
+    # -P keeps Python from importing the working directory, which may hold a checkout's copy.
     makeWrapper ${python3}/bin/python3 $out/bin/events \
       --add-flags "-P -m events" \
       --set PYTHONPATH $out/lib \

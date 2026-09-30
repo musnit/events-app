@@ -1,4 +1,4 @@
-"""Shared test helpers: a settable clock, in-memory stores, fake upstream clients and listing builders."""
+"""The tests share a settable clock, in-memory stores, fake upstream clients and listing builders."""
 from __future__ import annotations
 
 import base64
@@ -81,8 +81,8 @@ def response(body: object = b"", status: int = 200, content_type: str = "applica
 
 
 class FakeRequest:
-    """Stands in for ``net.request``: records each call and answers via ``handler(url, **kwargs)``.
-    A handler may return an Exception instance to have it raised."""
+    """Stands in for ``net.request``. It records each call and answers via ``handler(url, **kwargs)``;
+    a handler may return an Exception instance to have it raised."""
 
     def __init__(self, handler):
         self.handler = handler
