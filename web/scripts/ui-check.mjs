@@ -88,6 +88,12 @@ for (const [vpName, options] of Object.entries(VIEWPORTS)) {
   for (const scheme of ["light", "dark"]) {
     if (scheme === "dark" && vpName !== "phone" && vpName !== "desktop") continue;
     const context = await browser.newContext({ ...options, colorScheme: scheme, timezoneId: "America/Los_Angeles", locale: "en-US" });
+    // Count showPicker() calls, so the date check can tell whether a click opened the calendar.
+    await context.addInitScript(() => {
+      window.__pickerCalls = 0;
+      const original = HTMLInputElement.prototype.showPicker;
+      HTMLInputElement.prototype.showPicker = function () { window.__pickerCalls++; return original.call(this); };
+    });
     const page = await context.newPage();
     const errors = [];
     page.on("console", (msg) => msg.type() === "error" && errors.push(msg.text()));
@@ -125,6 +131,23 @@ for (const [vpName, options] of Object.entries(VIEWPORTS)) {
       const ok = response.status() === 200 && before !== after;
       if (!ok) problems++;
       console.log(`${vpName}/${scheme}/star: ${ok ? "ok" : `FAILED (status ${response.status()}, ${before} -> ${after})`}`);
+
+      // A mouse click on "Pick a date" opens the calendar, and a tap leaves it to the device's own picker.
+      // The chosen date moves the page and shows on the chip.
+      await page.goto(BASE, { waitUntil: "networkidle" });
+      const dateChip = page.locator(".date-chip");
+      if (options.hasTouch) await dateChip.tap();
+      else await dateChip.click();
+      const pickerCalls = await page.evaluate(() => window.__pickerCalls);
+      await page.keyboard.press("Escape");
+      const picked = new Date(Date.now() + 10 * 86_400_000);
+      const pickedKey = `${picked.getFullYear()}-${pad(picked.getMonth() + 1)}-${pad(picked.getDate())}`;
+      await dateChip.locator("input").fill(pickedKey);
+      await page.waitForURL(`**/agenda/${pickedKey}`, { timeout: 5000 }).catch(() => {});
+      const chipText = await dateChip.innerText();
+      const dateOk = pickerCalls === (options.hasTouch ? 0 : 1) && page.url().endsWith(`/agenda/${pickedKey}`) && chipText !== "Pick a date";
+      if (!dateOk) problems++;
+      console.log(`${vpName}/${scheme}/pick-a-date: ${dateOk ? "ok" : `FAILED (showPicker ${pickerCalls}, url ${new URL(page.url()).pathname}, chip "${chipText}")`}`);
 
       // Open an event over the list, then close it again; open the filter sheet on small screens.
       await page.goto(BASE, { waitUntil: "networkidle" });
