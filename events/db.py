@@ -107,6 +107,16 @@ MIGRATIONS: list[str] = [
 
     CREATE TABLE prefs (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     """,
+    # 2: single Luma events added by link
+    """
+    -- Each row has a feed (luma:<event id>) that keeps the event current.
+    CREATE TABLE linked_events (
+        event_id TEXT PRIMARY KEY,
+        url TEXT NOT NULL,
+        name TEXT,
+        added_at REAL NOT NULL
+    );
+    """,
 ]
 
 

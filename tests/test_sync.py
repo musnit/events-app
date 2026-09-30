@@ -564,6 +564,61 @@ class PullTest(SyncTestCase):
         self.assertEqual(self.store.feed(KEY).failures, 0)
 
 
+EVT = "evt-FNsJLjeVNGCdNxs"
+EVT_KEY = f"luma:{EVT}"
+
+
+class LinkedEventTest(SyncTestCase):
+    def test_an_event_added_by_link_shows_at_once_and_stays_current(self):
+        self.sync.link_event(listing(EVT, name="Opening (save the date)", start=iso(24 * 50)))
+        self.assertEqual(self.listed(), {EVT: "luma-links"})
+        self.assertIn("luma-links", self.calendar_ids())
+        link_feed = self.store.feed(EVT_KEY)
+        self.assertEqual((link_feed.kind, link_feed.calendar_id), ("luma-event", "luma-links"))
+        self.assertEqual(self.queued("luma"), {}, "the link brought the event, so nothing waits to be pulled")
+        self.assertFalse(self.sync.is_due(link_feed, self.clock()))
+        self.assertTrue(self.sync.is_due(link_feed, self.clock() + self.settings.luma_interval))
+
+        # A pull brings the latest details, asking with the session so your RSVP comes along.
+        self.store.set_secret("luma_session", {"session_key": "sess-1"})
+        self.luma.single_events[EVT] = listing(EVT, name="Opening", start=iso(24 * 50), going_status="approved")
+        self.sync._run(link_feed, SCHEDULED)
+        self.assertEqual(self.luma.calls[-1], ("event", EVT, "sess-1"))
+        self.assertEqual(self.store.linked_events()[0]["name"], "Opening")
+
+    def test_a_rejected_session_is_dropped_and_the_event_pulled_without_it(self):
+        self.sync.link_event(listing(EVT, start=iso(24)))
+        self.store.set_secret("luma_session", {"session_key": "sess-1"})
+
+        def answer(session_key):
+            if session_key:
+                raise LumaError(401, "signed out")
+            return listing(EVT, name="Pulled without a session", start=iso(24))
+        self.luma.single_events[EVT] = answer
+        self.sync._run(self.store.feed(EVT_KEY), SCHEDULED)
+        self.assertIsNone(self.store.get_secret("luma_session"))
+        self.assertEqual([c[2] for c in self.luma.calls if c[0] == "event"], ["sess-1", None])
+        self.assertEqual(self.store.linked_events()[0]["name"], "Pulled without a session")
+
+    def test_a_pull_never_brings_back_a_removed_link(self):
+        self.sync.link_event(listing(EVT, start=iso(24)))
+        self.assertTrue(self.store.remove_linked_event(EVT))
+        self.store.update_linked_event(listing(EVT, name="Pulled while being removed", start=iso(24)))
+        self.assertEqual(self.store.linked_events(), [])
+        self.sync.reconcile()
+        self.assertIsNone(self.store.feed(EVT_KEY))
+        self.assertEqual(self.listed(), {})
+        self.assertNotIn("luma-links", self.calendar_ids(), "the calendar goes with its last event")
+
+    def test_an_old_event_added_by_link_ages_out_with_its_feed(self):
+        self.sync.link_event(listing(EVT, start=iso(24), end=iso(26)))
+        self.clock.advance(70 * 86400)
+        self.assertEqual(self.store.prune(), 1)
+        self.assertEqual(self.store.linked_events(), [])
+        self.sync.reconcile()
+        self.assertIsNone(self.store.feed(EVT_KEY))
+
+
 class LifecycleTest(SyncTestCase):
     def test_start_pulls_due_feeds_and_stop_ends_the_threads(self):
         self.agihouse.result = [listing("agi-1", source="agihouse")]

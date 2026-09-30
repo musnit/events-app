@@ -12,7 +12,7 @@ from events.sources.partiful import PartifulError
 from events.sync import NEW, USER, Sync
 from events.web import Request
 
-from .helpers import (NOW, FakeAgiHouse, FakeClock, FakeLuma, FakePartiful, add_feed, calendar, fixture, jwt, listing,
+from .helpers import (NOW, FakeAgiHouse, FakeClock, FakeLuma, FakePartiful, add_feed, calendar, fixture, iso, jwt, listing,
                       make_settings, make_store, serve_raw, temp_dir)
 
 INDEX_HTML = ('<!doctype html><html><head><meta charset="utf-8" /><base href="/" /><title>luma-cal</title></head>'
@@ -374,21 +374,40 @@ class LumaApiTest(WebTestCase):
                 self.assertEqual(self.call("POST", "/api/luma/import", body).status, 400)
         self.assertEqual(self.store.calendars(), [])
 
-    def test_add_calendars_by_link(self):
+    def test_add_calendars_and_events_by_link(self):
+        EVT = "evt-FNsJLjeVNGCdNxs"
         self.luma.resolved = {"Big-Brain-Bay": calendar("cal-oWJafai4qVBegex", "Big Brain"),
                               "nope": ValueError("Luma has no page there"),
                               "busy": LumaError(429, "slow down")}
-        resp = self.call("POST", "/api/luma/calendars",
-                         {"text": "https://luma.com/Big-Brain-Bay lu.ma/nope https://luma.com/user/x lu.ma/busy"})
+        self.luma.event_links = {"cisai-886g": listing(EVT, name="CISAI Opening", start=iso(24 * 50))}
+        resp = self.call("POST", "/api/luma/links",
+                         {"text": "https://luma.com/Big-Brain-Bay lu.ma/nope https://luma.com/cisai-886g "
+                                  "https://luma.com/user/x lu.ma/busy"})
         self.assertEqual(self.json_of(resp), {
-            "added": [{"id": "cal-oWJafai4qVBegex", "name": "Big Brain"}],
+            "added": [{"kind": "calendar", "id": "cal-oWJafai4qVBegex", "name": "Big Brain"},
+                      {"kind": "event", "id": EVT, "name": "CISAI Opening"}],
             "failed": [{"link": "nope", "error": "Luma has no page there"},
-                       {"link": "user/x", "error": "not a calendar link"},
+                       {"link": "user/x", "error": "not a calendar or event link"},
                        {"link": "busy", "error": "Luma 429: slow down"}]})
         self.assertEqual(self.store.calendar("cal-oWJafai4qVBegex")["origins"], ["link"])
+        # The new calendar is pulled next; the event arrived with its link and shows at once.
         self.assertEqual(self.queued("luma"), {"luma:cal-oWJafai4qVBegex": NEW})
-        self.assertEqual(self.call("POST", "/api/luma/calendars", {"text": "nothing to see"}).status, 400)
-        self.assertEqual(self.call("POST", "/api/luma/calendars", {}).status, 400)
+        added = next(e for e in self.json_of(self.call("GET", "/api/events"))["events"] if e["id"] == EVT)
+        self.assertTrue(added["linked"])
+        self.assertEqual(added["calendar_ids"], ["luma-links"])
+        self.assertEqual(self.call("POST", "/api/luma/links", {"text": "nothing to see"}).status, 400)
+        self.assertEqual(self.call("POST", "/api/luma/links", {}).status, 400)
+
+    def test_remove_an_event_added_by_link(self):
+        EVT = "evt-FNsJLjeVNGCdNxs"
+        self.sync.link_event(listing(EVT, name="CISAI Opening"))
+        status = self.json_of(self.call("GET", "/api/status"))["luma"]
+        self.assertEqual(status["linked_events"], [{"id": EVT, "name": "CISAI Opening",
+                                                    "url": f"https://luma.com/{EVT}", "last_error": None}])
+        self.assertEqual(self.call("DELETE", f"/api/luma/events/{EVT}").status, 200)
+        self.assertEqual(self.call("DELETE", f"/api/luma/events/{EVT}").status, 404)
+        self.assertNotIn(EVT, [e["id"] for e in self.json_of(self.call("GET", "/api/events"))["events"]])
+        self.assertIsNone(self.store.calendar("luma-links"), "the calendar goes with its last event")
 
     def test_remove_calendar(self):
         self.store.upsert_calendar(calendar("cal-a"), "import")
@@ -523,7 +542,7 @@ class StatusTest(WebTestCase):
         self.assertEqual(status["version"], events.__version__)
         self.assertEqual(status["luma"], {"session": True, "session_via": "cookie", "session_notice": None, "ics": None,
                                           "calendars": 3, "calendars_by_origin": {"followed": 1, "import": 1, "link": 1, "config": 0},
-                                          "going_snapshot": 1})
+                                          "going_snapshot": 1, "linked_events": []})
         self.assertEqual(status["partiful"], {"accounts": [{"uid": "uid-1", "name": "Jordan", "added_at": NOW}], "feed": None})
         self.assertEqual(set(status["workers"]), {"luma", "partiful", "agihouse"})
         self.assertIn("luma:following", [f["key"] for f in status["feeds"]])

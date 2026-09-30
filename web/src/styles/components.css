@@ -256,6 +256,9 @@ details.more[open] > summary { margin-bottom: 8px; }
 .account-list li .button { margin-left: auto; }
 .account-list .icon { color: var(--success); }
 .chip-list { flex-direction: row; flex-wrap: wrap; }
+/* A long name shrinks to the row and ends with an ellipsis; its link stays a comfortable tap target. */
+.chip-list .chip { max-width: 100%; }
+.chip-list .chip > a { min-width: 0; overflow: hidden; text-overflow: ellipsis; line-height: 30px; }
 .failures { margin-top: 12px; font-size: 0.92rem; }
 .failures summary { cursor: pointer; color: var(--danger); font-weight: 600; }
 .failures ul { padding-left: 18px; }

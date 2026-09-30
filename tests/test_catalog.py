@@ -5,6 +5,7 @@ import unittest
 from events import categorize
 from events.catalog import Catalog
 from events.sources import agihouse, empty_location, partiful
+from events.sources.luma import LINKED_CALENDAR
 from events.sync import LUMA_MINE
 
 from .helpers import HOUR, FakeClock, add_feed, iso, listing, make_store
@@ -46,6 +47,17 @@ class BuildTest(CatalogTestCase):
         self.assertTrue(ev["going"])
         self.assertEqual(ev["going_status"], "registered")
         self.assertEqual(ev["also_on"], [])
+
+    def test_events_added_by_link_are_marked(self):
+        self.store.upsert_calendar(LINKED_CALENDAR, "builtin")
+        self.store.ensure_feed("luma:evt-linked", source="luma", kind="luma-event", calendar_id="luma-links",
+                               label="Linked")
+        self.store.replace_listings("luma:evt-linked", [listing("evt-linked")])
+        self.store.replace_listings(self.cal_a, [listing("evt-linked"), listing("evt-plain")])
+        events = self.events()
+        self.assertTrue(events["evt-linked"]["linked"])
+        self.assertEqual(events["evt-linked"]["calendar_ids"], ["cal-a", "luma-links"])
+        self.assertFalse(events["evt-plain"]["linked"])
 
     def test_going_from_the_going_table(self):
         self.store.replace_listings(self.cal_b, [listing("evt-2"), listing("evt-3")])

@@ -17,12 +17,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from . import areas, categorize
+from .sources.luma import LINKED_CALENDAR
 from .store import Store
 from .timeutil import parse_iso, to_iso
 
 HISTORY_DAYS = 45  # enough for the month view to show earlier weeks of the current month
 # Which listing supplies an event's details when several feeds list it.
-FEED_RICHNESS = {"calendar": 6, "luma-mine": 5, "partiful-mine": 4, "partiful-following": 4, "agihouse": 3,
+FEED_RICHNESS = {"calendar": 6, "luma-event": 6, "luma-mine": 5, "partiful-mine": 4, "partiful-following": 4, "agihouse": 3,
                  "partiful-feed": 2, "luma-ics": 1}
 SOURCE_RANK = {"luma": 0, "partiful": 1, "agihouse": 2}
 DUPLICATE_WINDOW_S = 3 * 3600
@@ -103,6 +104,8 @@ class Catalog:
             ev["starred"] = any(m.get("starred") for m in own)
             ev["hidden"] = any(m.get("hidden") for m in own)
             ev["muted"] = bool(ev["calendar_ids"]) and all(c in muted for c in ev["calendar_ids"])
+            # You asked for an event added by link, so the area filter leaves it in.
+            ev["linked"] = LINKED_CALENDAR["id"] in ev["calendar_ids"]
         events.sort(key=lambda e: (e["start_at"], e["name"]))
 
         upcoming_cutoff = to_iso(now)

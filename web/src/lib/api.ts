@@ -70,8 +70,10 @@ export const api = {
   lumaImport: (payload: unknown) =>
     send<{ total: number; added: number; removed: number; going: number; session: boolean }>("POST", "api/luma/import", { payload }),
   lumaAddLinks: (text: string) =>
-    send<{ added: { id: string; name: string }[]; failed: { link: string; error: string }[] }>("POST", "api/luma/calendars", { text }),
+    send<{ added: { kind: "calendar" | "event"; id: string; name: string }[]; failed: { link: string; error: string }[] }>(
+      "POST", "api/luma/links", { text }),
   lumaRemoveCalendar: (id: string) => send<{ ok: true }>("DELETE", `api/luma/calendars/${encodeURIComponent(id)}`),
+  lumaRemoveEvent: (id: string) => send<{ ok: true }>("DELETE", `api/luma/events/${encodeURIComponent(id)}`),
   lumaSetSession: (session_key: string) => send<{ ok: true }>("PUT", "api/luma/session", { session_key }),
   lumaClearSession: () => send<{ ok: true }>("DELETE", "api/luma/session"),
   lumaSetIcs: (url: string) => send<{ ok: true; events: number }>("PUT", "api/luma/ics", { url }),

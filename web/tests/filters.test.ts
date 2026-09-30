@@ -13,7 +13,7 @@ function event(patch: Partial<EventItem>): EventItem {
     hosts: [{ name: "Ada Lovelace", avatar_url: null }], tags: ["Networking"], ticket: null, guest_count: 30,
     going: false, going_status: null, calendar_ids: ["cal-a"], first_seen_at: null, announced_at: null, also_on: [],
     area: "bay", zone: "sf", vibes: ["build"], topics: ["ai"], size: "intimate", starred: false, hidden: false, muted: false,
-    ...patch,
+    linked: false, ...patch,
   };
 }
 
@@ -26,6 +26,12 @@ test("area preference keeps Bay Area events and optionally online ones", () => {
   assert.equal(matchEvent(online, EMPTY_FILTERS, { ...ctx, area: "bay-online" }), true);
   assert.equal(matchEvent(far, EMPTY_FILTERS, { ...ctx, area: "bay-online" }), false);
   assert.equal(matchEvent(far, { ...EMPTY_FILTERS, area: "all" }, ctx), true);
+});
+
+test("an event added by its own link shows wherever it is", () => {
+  const far = event({ area: "elsewhere", zone: null, linked: true });
+  assert.equal(matchEvent(far, EMPTY_FILTERS, ctx), true);
+  assert.equal(matchEvent({ ...far, muted: true }, EMPTY_FILTERS, ctx), false, "muting its calendar still hides it");
 });
 
 test("vibes and topics match any chosen value, and combine with each other", () => {
