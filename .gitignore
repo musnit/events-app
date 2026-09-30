@@ -18,3 +18,7 @@ partiful_debug.json
 .luma_ics.json
 .luma_going.json
 .partiful.json
+
+# Nix build output
+/result
+/result-*

@@ -1,14 +1,16 @@
-# luma-cal — agent context
+# events — agent context
 
-One calendar of every upcoming event across the Luma calendars musnit follows, his Partiful events
+One calendar of every upcoming event across the Luma calendars musnit follows, musnit's Partiful events
 and AGI House. Luma's public API only covers calendars you *manage*, and Partiful has none, so the
 app reads the same internal endpoints their websites use. Everything upstream is unofficial.
+README.md is the user-facing documentation (it doubles as the agent-lab docs page); this file is for
+working on the code and is never copied to the lab.
 
 ## Layout
 
-- `server.py` — entry point (`python3 server.py`), kept at the root so the service command never changes.
-- `lumacal/` — backend, Python 3.11+ **standard library only**.
-  - `config.py` settings from env · `db.py` SQLite + numbered migrations · `store.py` all SQL
+- `server.py` — checkout entry point (`python3 server.py`, the same as `python3 -m events`).
+- `events/` — backend, Python 3.11+ **standard library only**.
+  - `config.py` `EVENTS_*` settings (table in README.md) · `db.py` SQLite + numbered migrations · `store.py` all SQL
   - `sources/` one client per upstream (`luma.py`, `partiful.py`, `agihouse.py`) → listing dicts (shape in `sources/__init__.py`)
   - `sync.py` background workers · `catalog.py` merges listings into the event list · `categorize.py` vibes/topics
   - `areas.py` Bay Area zones · `ics.py` iCalendar read/write · `web.py` HTTP/API/static · `legacy.py` v1 import
@@ -17,8 +19,12 @@ app reads the same internal endpoints their websites use. Everything upstream is
   - `src/state/` data store (polling), router, toasts · `src/components/` · `src/views/` one file per screen
   - `tests/` node:test unit tests · `scripts/ui-check.mjs` headless-Chromium screenshots and layout audit
 - `tests/` — backend unittest suite (offline; upstreams are faked).
-- `data/` (gitignored, 0700) — `lumacal.db` (events, sources, **secrets**, prefs) and `legacy/` (v1 files after import).
-- `deploy/` — unit and nginx route for the old clawd.musnitzky.com host (see Hosting).
+- State lives in `EVENTS_STATE_DIR` (default `~/.local/state/events`; on devbox the gitignored `data/`, 0700):
+  `events.db` (events, sources, **secrets**, prefs) and `legacy/` (v1 files after import).
+- Nix: `package.nix` (offline build running both test suites), `module.nix` (`services.events`),
+  `flake.nix` + `standalone-test.nix` (the module's VM test). `default.nix` + `test.nix` are the agent-lab
+  half (`lab.events`) and only evaluate inside agent-lab as `public/modules/events/` (see Hosting).
+- `scripts/check.sh` runs the non-Nix checks; `scripts/lab-export.sh` copies the app into an agent-lab checkout.
 
 ## Commands
 
@@ -28,11 +34,16 @@ npm --prefix web ci                              # frontend deps (pinned, lockfi
 npm --prefix web test                            # frontend unit tests
 npm --prefix web run build                       # type-check + build into web/dist (the server serves it)
 scripts/check.sh                                 # all of the above
-LUMACAL_SYNC=0 PORT=8771 python3 server.py       # run without background sync (UI work)
-npm --prefix web run dev                         # Vite dev server on 127.0.0.1:5173, proxies /api to $LUMACAL_API or :8771
-BROWSER_BIN=… BASE_URL=http://127.0.0.1:8771/ npm --prefix web run check:ui   # screenshots in /tmp/lumacal-ui
-python3 -m lumacal.categorize data/lumacal.db [vibes|topics]                  # categorization coverage report
+nix build                                        # the Nix package; its build runs both test suites
+nix flake check                                  # the package and a VM test of module.nix
+EVENTS_SYNC=0 EVENTS_STATE_DIR=data python3 server.py   # serve without background sync (UI work)
+npm --prefix web run dev                         # Vite dev server on 127.0.0.1:5173, proxies /api to $EVENTS_API or :8771
+BROWSER_BIN=… BASE_URL=http://127.0.0.1:8771/ npm --prefix web run check:ui   # screenshots in /tmp/events-ui
+python3 -m events.categorize data/events.db [vibes|topics]                    # categorization coverage report
 ```
+
+After changing `web/package-lock.json`, update `npmDepsHash` in `package.nix`: set it to `lib.fakeHash`,
+run `nix build`, and copy the hash it reports.
 
 On this box a Chromium lives in the Nix store (`ls -d /nix/store/*-chromium-1*/bin/chromium`). Emoji need a
 font: point `FONTCONFIG_FILE` at a config that adds Noto Color Emoji, or chips show boxes in screenshots.
@@ -41,9 +52,12 @@ font: point `FONTCONFIG_FILE` at a config that adds Noto Color Emoji, or chips s
 
 - **calendar**: what the user sees and can mute (a Luma calendar, "Partiful · my events", "AGI House").
   Kept while any *origin* claims it: `followed` (session sync), `import` (bookmarklet; the import is the
-  complete followed set, so re-running it also drops unfollowed calendars), `link`, `builtin`.
-- **feed**: one unit a worker pulls (`luma:cal-…`, `luma:following`, `luma:mine`, `luma:ics`,
+  complete followed set, so re-running it also drops unfollowed calendars), `link`, `config`
+  (`EVENTS_LUMA_CALENDARS`), `builtin`. The API refuses to remove `followed` and `config` calendars.
+- **feed**: one unit a worker pulls (`luma:cal-…`, `luma:following`, `luma:mine`, `luma:ics`, `luma:config`,
   `partiful:<uid>:mine|following`, `partiful:feed`, `agihouse`). Holds sync health and backoff.
+  `luma:config` resolves the configured links once (meta `luma_config_resolved`); it runs again only when the
+  configured list changes (meta `luma_config_tokens`, compared at start) or after a failure's backoff.
 - **listing**: an event as one feed reported it. A good pull replaces the feed's *upcoming* listings;
   past ones stay as history (pruned after 60 days). The catalog merges listings by event id, folds
   cross-source duplicates (same title ±3 h), applies RSVPs (`going`), marks (star/hide) and mutes.
@@ -54,8 +68,8 @@ font: point `FONTCONFIG_FILE` at a config that adds Noto Color Emoji, or chips s
 
 One worker thread per upstream with a de-duplicated priority queue: user refresh > newly added source >
 schedule. Nothing is dropped; asking again only raises priority. Each pull is stored immediately, so the
-UI fills in during a pass and restarts resume from per-feed timestamps. Intervals: Luma calendars 4 h,
-15 s apart (`CALENDAR_SPACING`); user-triggered pulls 2 s apart; personal feeds, Partiful 1 h; AGI House 2 h.
+UI fills in during a pass and restarts resume from per-feed timestamps. Intervals (each an `EVENTS_*`
+setting): Luma calendars 4 h, 15 s apart; user-triggered pulls 2 s apart; personal feeds, Partiful 1 h; AGI House 2 h.
 A 429 pauses the Luma worker (45 s → 5 min) and retries; other failures back off per feed (10 min → 4 h)
 and keep the feed's previous listings. A Luma 401 forgets the session and retries without it.
 
@@ -110,16 +124,22 @@ Writes must be same-origin JSON (Sec-Fetch-Site/Origin checked); the portal in f
 ## Hosting
 
 - **devbox (current)**: prototype `events` → https://events.devbox.musnitzky.com/ (portal sign-in required).
-  It runs `python3 server.py` from the main checkout `/home/lab/events-app` as user unit
-  `prototype-events.service`; the helper supplies `HOST`/`PORT`. To deploy: `git -C /home/lab/events-app pull --ff-only`,
+  It runs `python3 -m events` from the main checkout `/home/lab/events-app` as user unit
+  `prototype-events.service`, with `EVENTS_LISTEN` built from the helper's `HOST`/`PORT` and
+  `EVENTS_STATE_DIR=/home/lab/events-app/data`. To deploy: `git -C /home/lab/events-app pull --ff-only`,
   `npm --prefix /home/lab/events-app/web ci && npm --prefix /home/lab/events-app/web run build`,
   `prototype restart events`; check `prototype logs events`. Never point it at a T3 worktree.
-- **clawd.musnitzky.com (old)**: `deploy/luma-cal.service` + `deploy/events.conf` (nginx strips `/events/` and sends
-  `X-Forwarded-Prefix`). Build the web app there too before restarting.
+- **agent-lab (next, for the NAS)**: the lab keeps its apps in `public/modules/<app>/`, so the app is copied
+  there: `scripts/lab-export.sh ~/agent-lab` on a lab branch, then a lab pull request that a human merges.
+  The copy is the committed tree minus `.gitattributes`' export-ignore list. Make changes here and export
+  again; never edit the lab copy. Before exporting, check the lab half in a scratch clone:
+  `git clone -q ~/agent-lab /tmp/lab && scripts/lab-export.sh /tmp/lab && git -C /tmp/lab add -A &&
+  nix build /tmp/lab#checks.x86_64-linux.events`. Everything exported is the lab's shareable stack:
+  no names, hosts or domains in code, tests or README.md; a lab sets its calendars through `lab.events.*`.
 
 ## Gotchas
 
-- `data/lumacal.db` holds the Luma session, Partiful refresh tokens and private feed URLs. Never commit `data/`.
+- `events.db` holds the Luma session, Partiful refresh tokens and private feed URLs. Never commit `data/`.
 - The API never returns secrets; feed URLs come back masked.
 - Calendar apps cannot subscribe to `/feed.ics` because the portal requires sign-in; it is a download.
 - Frontend TypeScript must stay erasable (no enums/namespaces) and import with `.ts` extensions, because
