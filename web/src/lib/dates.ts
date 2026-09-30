@@ -48,7 +48,7 @@ export function startOfWeek(d: Date, weekStartsOn = 0): Date {
   return addDays(day, -((day.getDay() - weekStartsOn + 7) % 7));
 }
 
-/** The days shown in a month grid: whole weeks covering the month. */
+/** Returns the days a month grid shows, in whole weeks that cover the month. */
 export function monthGrid(month: Date, weekStartsOn = 0): Date[] {
   const first = new Date(month.getFullYear(), month.getMonth(), 1);
   const last = new Date(month.getFullYear(), month.getMonth() + 1, 0);

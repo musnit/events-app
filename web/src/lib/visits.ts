@@ -23,7 +23,7 @@ function write(state: VisitState): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(state));
   } catch {
-    /* private mode: badges just won't persist */
+    /* In private mode the badges just don't persist. */
   }
 }
 

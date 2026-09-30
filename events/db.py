@@ -1,4 +1,4 @@
-"""SQLite access: one shared connection behind a lock, plus numbered schema migrations.
+"""The database is one shared SQLite connection behind a lock, with numbered schema migrations.
 
 The app is small and mostly reads, so a single serialized connection is simpler and safer than a
 pool. SQLite's own locking still protects the file if another process (the sqlite3 CLI, a backup)

@@ -3,7 +3,7 @@
 //
 //   BROWSER_BIN=/path/to/chromium BASE_URL=http://127.0.0.1:8771/ npm run check:ui
 //
-// Optional: OUT_DIR (default /tmp/events-ui), ONLY=phone|desktop|tablet, PAGES=comma list of page names.
+// OUT_DIR (default /tmp/events-ui), ONLY=phone|desktop|tablet and PAGES (a comma list of page names) are optional.
 
 import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright-core";
@@ -110,7 +110,7 @@ for (const [vpName, options] of Object.entries(VIEWPORTS)) {
       console.log(`${vpName}/${scheme}/${name}: ${issues.length ? issues.join("\n    ") : "ok"}  [${result.title}]`);
     }
     if (scheme === "light" && (!pageFilter || pageFilter.includes("interactions"))) {
-      // Star and unstar an event: a real browser write through the API's same-origin checks.
+      // Starring and unstarring an event makes a real browser write through the API's same-origin checks.
       await page.goto(BASE, { waitUntil: "networkidle" });
       const star = page.locator(".event-card .star-button").first();
       const before = await star.getAttribute("aria-pressed");

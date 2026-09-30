@@ -45,7 +45,7 @@ function SearchBox({ filterable, autoFocus, onClose }: { filterable: Filterable;
   );
 }
 
-/** A screen: header (title, optional controls) and, for list views, search and filters. */
+/** Lays out a screen: a header with its title and controls and, on list views, search and filters. */
 export function Page({ title, eyebrow, controls, filterable, children, className = "" }: {
   title: ReactNode;
   eyebrow?: ReactNode;

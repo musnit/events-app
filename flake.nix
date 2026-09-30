@@ -1,4 +1,4 @@
-# Standalone flake, so the app runs anywhere with Nix:
+# This standalone flake runs the app anywhere with Nix:
 #
 #   nix run .                     # serves on 127.0.0.1:8771, state in ~/.local/state/events
 #   nix build .                   # the package; its build runs both test suites
@@ -8,7 +8,7 @@
 # A lab does not go through this file: it imports package.nix and module.nix by path
 # (default.nix) so they share the lab's nixpkgs pin.
 {
-  description = "events: one calendar of the Luma, Partiful and AGI House events you follow";
+  description = "The events app and its NixOS module";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 

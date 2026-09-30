@@ -3,7 +3,7 @@ import { useData } from "../state/data.ts";
 import { dismissToast, useToasts } from "../state/toasts.ts";
 import { Icon } from "./Icon.tsx";
 
-/** App-wide conditions: portal sign-in expired, offline, or the server could not be reached. */
+/** Shows app-wide conditions: an expired portal sign-in, no connection, or a server that cannot be reached. */
 export function Banners() {
   const { sessionExpired, offline, error, catalog } = useData();
   if (sessionExpired) {

@@ -2,8 +2,8 @@
 // this app cannot fetch itself, and bring it back in the URL fragment (never sent to any server
 // until the app posts it to its own API).
 //
-// Luma: the calendars you follow (paginated) and the events you registered for.
-// Partiful: the Firebase refresh token from partiful.com's IndexedDB.
+// The Luma bookmarklet brings the calendars you follow (page by page) and the events you registered for.
+// The Partiful bookmarklet brings the Firebase refresh token from partiful.com's IndexedDB.
 
 export function appRootUrl(): string {
   return new URL("./", document.baseURI).toString();

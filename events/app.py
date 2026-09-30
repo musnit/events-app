@@ -1,4 +1,5 @@
-"""Start-up: settings, database, one-time legacy import, sync workers and the HTTP server."""
+"""Start-up reads the settings, opens the database, runs the optional v1 import, and starts the sync workers
+and the HTTP server."""
 from __future__ import annotations
 
 import logging

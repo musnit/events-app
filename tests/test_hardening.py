@@ -1,4 +1,4 @@
-"""Guards added after review: upstream shape changes must not wipe data, and odd input stays harmless."""
+"""An upstream that changes shape must not wipe data, and odd input must stay harmless."""
 import unittest
 
 from events import areas, categorize, ics

@@ -1,6 +1,6 @@
-# The NixOS module: `services.events`. Generic — nothing here knows about any particular lab. It
-# turns the package into a sandboxed systemd unit and translates options into the EVENTS_*
-# environment the program reads. A lab sets these options from its own module (default.nix).
+# This NixOS module declares services.events and knows nothing about any particular lab. It turns
+# the package into a sandboxed systemd unit and translates options into the EVENTS_* environment
+# the program reads. A lab sets these options from its own module (default.nix).
 {
   config,
   lib,
@@ -93,7 +93,7 @@ in
     users.groups.events = { };
 
     systemd.services.events = {
-      description = "events — one calendar of the events you follow";
+      description = "Gather the events you follow into one calendar";
       wantedBy = [ "multi-user.target" ];
       # The first pulls start at once; without the network they would wait out a backoff.
       wants = [ "network-online.target" ];
@@ -120,7 +120,7 @@ in
         StateDirectoryMode = "0700";
         UMask = "0077";
 
-        # Sandbox: read the OS, write the state dir, open sockets (AF_UNIX for name lookups).
+        # The sandbox lets it read the OS, write its state dir and open sockets (AF_UNIX for name lookups).
         ProtectSystem = "strict";
         ProtectHome = true;
         PrivateTmp = true;

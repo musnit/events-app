@@ -81,7 +81,7 @@ export function CalendarsView() {
   );
 }
 
-/** One calendar: what it is, its upcoming events (anywhere), and controls. */
+/** Shows one calendar with what it is, its upcoming events anywhere, and its controls. */
 export function CalendarView({ id }: { id: string }) {
   const { route, filters } = useView();
   const { catalog, loading } = useData();

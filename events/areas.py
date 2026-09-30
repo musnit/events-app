@@ -1,4 +1,4 @@
-"""Where an event is: Bay Area (and which part), online, elsewhere, or unknown."""
+"""An event is in the Bay Area (and a part of it), online, elsewhere, or somewhere unknown."""
 from __future__ import annotations
 
 import math
