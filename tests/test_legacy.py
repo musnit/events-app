@@ -3,10 +3,10 @@ import os
 import stat
 import unittest
 
-from lumacal import ics, legacy
-from lumacal.catalog import Catalog
-from lumacal.sync import Sync
-from lumacal.timeutil import to_iso
+from events import ics, legacy
+from events.catalog import Catalog
+from events.sync import Sync
+from events.timeutil import to_iso
 
 from .helpers import (HOUR, NOW, FakeAgiHouse, FakeClock, FakeLuma, FakePartiful, iso, jwt, make_settings, make_store,
                       temp_dir)

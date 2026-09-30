@@ -2,10 +2,10 @@ import gzip
 import json
 import unittest
 
-from lumacal import categorize
-from lumacal.catalog import Catalog
-from lumacal.sources import agihouse, empty_location, partiful
-from lumacal.sync import LUMA_MINE
+from events import categorize
+from events.catalog import Catalog
+from events.sources import agihouse, empty_location, partiful
+from events.sync import LUMA_MINE
 
 from .helpers import HOUR, FakeClock, add_feed, iso, listing, make_store
 

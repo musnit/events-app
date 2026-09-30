@@ -1,13 +1,13 @@
 """Guards added after review: upstream shape changes must not wipe data, and odd input stays harmless."""
 import unittest
 
-from lumacal import areas, categorize, ics
-from lumacal.catalog import Catalog
-from lumacal.config import Settings
-from lumacal.sources import luma
-from lumacal.sources.luma import LumaClient, LumaError
-from lumacal.store import HISTORY_KEEP_DAYS
-from lumacal.sync import NEW, Sync
+from events import areas, categorize, ics
+from events.catalog import Catalog
+from events.config import Settings
+from events.sources import luma
+from events.sources.luma import LumaClient, LumaError
+from events.store import HISTORY_KEEP_DAYS
+from events.sync import NEW, Sync
 
 from .helpers import DAY, HOUR, FakeAgiHouse, FakeClock, FakeLuma, FakePartiful, FakeRequest, add_feed, iso, listing, \
     make_settings, make_store, response, serve_raw, temp_dir
@@ -105,8 +105,8 @@ class SmallEdgeCasesTest(unittest.TestCase):
     def test_sync_can_be_switched_off_in_words(self):
         for value in ("0", "false", "No", " off "):
             with self.subTest(value=value):
-                self.assertFalse(Settings.from_env({"LUMACAL_SYNC": value}).sync_enabled)
-        self.assertTrue(Settings.from_env({}).sync_enabled)
+                self.assertFalse(Settings.from_env({"EVENTS_SYNC": value, "HOME": "/home/me"}).sync_enabled)
+        self.assertTrue(Settings.from_env({"HOME": "/home/me"}).sync_enabled)
 
 
 class HandlerHardeningTest(WebTestCase):

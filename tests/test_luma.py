@@ -1,9 +1,9 @@
 import json
 import unittest
 
-from lumacal import net
-from lumacal.sources import luma
-from lumacal.sources.luma import LumaClient, LumaError
+from events import net
+from events.sources import luma
+from events.sources.luma import LumaClient, LumaError
 
 from .helpers import FakeRequest, fixture, response
 

@@ -227,7 +227,7 @@ export function SourcesView({ section, pwa }: { section: SourcesSection | null; 
           </button>
         </div>
         <p className="muted small">
-          Luma calendars refresh every 4 hours, 15 seconds apart, because Luma blocks bursts. Your own RSVPs, Partiful and AGI House refresh hourly.
+          Luma calendars refresh every 4 hours, 15 seconds apart, because Luma blocks bursts. Your own RSVPs and Partiful refresh hourly, AGI House every 2 hours.
           Anything you add syncs right away, and events appear as each calendar finishes.
         </p>
         {failing.length > 0 && (
@@ -252,6 +252,7 @@ export function SourcesView({ section, pwa }: { section: SourcesSection | null; 
           <p className="status-line">
             <Icon name={luma.calendars ? "check" : "alert"} size={16} />
             {luma.calendars ? `${pluralize(luma.calendars, "calendar")} connected` : "No Luma calendars yet"}
+            {luma.calendars_by_origin.config ? ` · ${luma.calendars_by_origin.config} set by the app's configuration` : ""}
             {luma.going_snapshot ? ` · ${pluralize(luma.going_snapshot, "RSVP")} from your last import` : ""}
           </p>
         )}

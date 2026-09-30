@@ -5,7 +5,7 @@ import urllib.error
 from email.message import Message
 from unittest import mock
 
-from lumacal import net
+from events import net
 
 SECRET_URL = "https://calendars.partiful.com/getCalendar?id=SECRET-TOKEN&x=1#frag"
 

@@ -101,7 +101,8 @@ export function CalendarView({ id }: { id: string }) {
     );
   }
 
-  const removable = cal.source === "luma" && cal.id.startsWith("cal-") && !cal.origins.includes("followed");
+  // Only calendars added here (import or link) can be removed here; Luma follows and configuration keep theirs.
+  const removable = cal.source === "luma" && cal.id.startsWith("cal-") && cal.origins.every((o) => o === "import" || o === "link");
 
   async function remove() {
     if (!cal || !window.confirm(`Stop pulling ${cal.name}? Its events disappear until you add it again.`)) return;

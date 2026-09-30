@@ -1,7 +1,7 @@
 import unittest
 
-from lumacal import areas
-from lumacal.sources import empty_location
+from events import areas
+from events.sources import empty_location
 
 
 def where(kind: str = "offline", *, name: str = "Meetup", timezone: str | None = None, **location) -> dict:

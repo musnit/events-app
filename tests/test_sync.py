@@ -4,11 +4,11 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from lumacal import sync as syncmod
-from lumacal.config import Settings
-from lumacal.sources.luma import LumaError
-from lumacal.sources.partiful import PartifulError
-from lumacal.sync import NEW, SCHEDULED, USER, RateLimited, Sync, Task, Worker, failure_backoff
+from events import sync as syncmod
+from events.config import PACKAGE_DIR, Settings
+from events.sources.luma import LumaError
+from events.sources.partiful import PartifulError
+from events.sync import NEW, SCHEDULED, USER, RateLimited, Sync, Task, Worker, failure_backoff
 
 from .helpers import (HOUR, NOW, FakeAgiHouse, FakeClock, FakeLuma, FakePartiful, calendar, feed, iso, listing,
                       make_settings, make_store, temp_dir)
@@ -21,27 +21,44 @@ FEED_URL = "https://calendars.partiful.com/getCalendar?id=abc"
 
 class SettingsTest(unittest.TestCase):
     def test_defaults(self):
-        s = Settings.from_env({"LUMACAL_ROOT": "/srv/lumacal"})
+        s = Settings.from_env({"HOME": "/home/me"})
         self.assertEqual((s.host, s.port), ("127.0.0.1", 8771))
-        self.assertEqual((s.root, s.data_dir, s.web_dir),
-                         (Path("/srv/lumacal"), Path("/srv/lumacal/data"), Path("/srv/lumacal/web/dist")))
-        self.assertEqual((s.luma_refresh, s.personal_refresh, s.partiful_refresh, s.agihouse_refresh),
+        self.assertEqual(s.state_dir, Path("/home/me/.local/state/events"))
+        self.assertEqual(s.web_dir, PACKAGE_DIR.parent / "web" / "dist")
+        self.assertEqual((s.legacy_dir, s.luma_calendars, s.agihouse), (None, (), True))
+        self.assertEqual((s.luma_interval, s.personal_interval, s.partiful_interval, s.agihouse_interval),
                          (4 * HOUR, HOUR, HOUR, 2 * HOUR))
         self.assertEqual((s.luma_spacing, s.manual_spacing), (15, 2))
         self.assertTrue(s.sync_enabled)
 
-    def test_overrides(self):
-        s = Settings.from_env({"HOST": "0.0.0.0", "PORT": "9000", "LUMACAL_DATA_DIR": "/tmp/d", "LUMACAL_WEB_DIR": "/tmp/w",
-                               "REFRESH_SECONDS": "60", "CALENDAR_SPACING": " 0.5 ", "LUMACAL_SYNC": "0", "MANUAL_SPACING": ""})
-        self.assertEqual((s.host, s.port, s.data_dir, s.web_dir), ("0.0.0.0", 9000, Path("/tmp/d"), Path("/tmp/w")))
-        self.assertEqual((s.luma_refresh, s.luma_spacing, s.manual_spacing), (60, 0.5, 2))
-        self.assertFalse(s.sync_enabled)
+    def test_state_directory_follows_xdg_and_is_required_without_a_home(self):
+        self.assertEqual(Settings.from_env({"XDG_STATE_HOME": "/xdg", "HOME": "/home/me"}).state_dir, Path("/xdg/events"))
+        with self.assertRaises(SystemExit):
+            Settings.from_env({})
 
-    def test_invalid_numbers_stop_start_up(self):
-        for env in ({"PORT": "http"}, {"PORT": "70000"}, {"PORT": "-1"}, {"CALENDAR_SPACING": "fast"}):
+    def test_overrides(self):
+        s = Settings.from_env({
+            "EVENTS_LISTEN": "0.0.0.0:9000", "EVENTS_STATE_DIR": "/tmp/d", "EVENTS_WEB_DIR": "/tmp/w",
+            "EVENTS_LEGACY_DIR": "/old", "EVENTS_LUMA_CALENDARS": "https://luma.com/one, cal-aaaaaaaaaaaa\ncal-aaaaaaaaaaaa",
+            "EVENTS_AGIHOUSE": "off", "EVENTS_LUMA_INTERVAL": "600", "EVENTS_LUMA_SPACING": " 0.5 ", "EVENTS_SYNC": "0",
+            "EVENTS_MANUAL_SPACING": "",
+        })
+        self.assertEqual((s.host, s.port, s.state_dir, s.web_dir, s.legacy_dir),
+                         ("0.0.0.0", 9000, Path("/tmp/d"), Path("/tmp/w"), Path("/old")))
+        self.assertEqual(s.luma_calendars, ("https://luma.com/one", "cal-aaaaaaaaaaaa"))
+        self.assertEqual((s.luma_interval, s.luma_spacing, s.manual_spacing, s.agihouse, s.sync_enabled),
+                         (600, 0.5, 2, False, False))
+
+    def test_listen_accepts_ipv6_and_every_interface(self):
+        self.assertEqual((Settings.from_env({"HOME": "/h", "EVENTS_LISTEN": "[::1]:8771"}).host), "::1")
+        self.assertEqual((Settings.from_env({"HOME": "/h", "EVENTS_LISTEN": ":8771"}).host), "")
+
+    def test_invalid_values_stop_start_up(self):
+        for env in ({"EVENTS_LISTEN": "http"}, {"EVENTS_LISTEN": "localhost:70000"}, {"EVENTS_LISTEN": "localhost:-1"},
+                    {"EVENTS_LUMA_SPACING": "fast"}, {"EVENTS_LUMA_INTERVAL": "10"}):
             with self.subTest(env=env):
                 with self.assertRaises(SystemExit):
-                    Settings.from_env(env)
+                    Settings.from_env({"HOME": "/h", **env})
 
 
 class WorkerTest(unittest.TestCase):
@@ -120,7 +137,7 @@ class WorkerTest(unittest.TestCase):
             raise RuntimeError("database is locked")
 
         self.worker._due = broken_due
-        with mock.patch.object(syncmod, "IDLE_CHECK_S", 0.01), self.assertLogs("lumacal.sync", "ERROR"):
+        with mock.patch.object(syncmod, "IDLE_CHECK_S", 0.01), self.assertLogs("events.sync", "ERROR"):
             self.assertIsNone(self.worker._next())
         status = self.worker.status()
         self.assertEqual((status["started_at"], status["last_finished_at"], status["done"], status["busy"]),
@@ -143,7 +160,7 @@ class WorkerTest(unittest.TestCase):
     def test_rate_limited_requeues_and_pauses_longer_each_time(self):
         self.errors["a"] = RateLimited("Luma is rate limiting requests.")
         task = Task(SCHEDULED, 7, "a")
-        with self.assertLogs("lumacal.sync", "WARNING"):
+        with self.assertLogs("events.sync", "WARNING"):
             self.worker._execute(task)
         self.assertIs(self.worker._queue["a"], task)
         self.assertEqual(self.worker._paused_until, NOW + 45)
@@ -154,7 +171,7 @@ class WorkerTest(unittest.TestCase):
         self.assertEqual(status["failed"], 0)
 
         pauses = []
-        with self.assertLogs("lumacal.sync", "WARNING"):
+        with self.assertLogs("events.sync", "WARNING"):
             for _ in range(5):
                 self.worker._execute(task)
                 pauses.append(self.worker._paused_until - NOW)
@@ -165,14 +182,14 @@ class WorkerTest(unittest.TestCase):
         self.errors["a"] = RateLimited("slow down")
         self.worker.enqueue(["a"], USER)
         queued = self.worker._queue["a"]
-        with self.assertLogs("lumacal.sync", "WARNING"):
+        with self.assertLogs("events.sync", "WARNING"):
             self.worker._execute(Task(SCHEDULED, 99, "a"))
         self.assertIs(self.worker._queue["a"], queued)
 
     def test_failures_are_recorded_with_backoff(self):
         self.feeds["b"] = feed("b", label="Feed b", failures=2)
         self.errors["b"] = LumaError(500, "oops")
-        with self.assertLogs("lumacal.sync", "WARNING"):
+        with self.assertLogs("events.sync", "WARNING"):
             self.worker._execute(Task(NEW, 1, "b"))
         self.assertEqual(self.failures, [("b", "Luma 500: oops", failure_backoff(3))])
         status = self.worker.status()
@@ -181,7 +198,7 @@ class WorkerTest(unittest.TestCase):
 
     def test_failure_messages_fall_back_to_the_exception_name(self):
         self.errors["a"] = ValueError()
-        with self.assertLogs("lumacal.sync", "WARNING"):
+        with self.assertLogs("events.sync", "WARNING"):
             self.worker._execute(Task(NEW, 1, "a"))
         self.assertEqual(self.failures[0][1], "ValueError")
 
@@ -192,7 +209,7 @@ class WorkerTest(unittest.TestCase):
             raise RuntimeError("disk full")
 
         self.worker._on_failure = broken
-        with self.assertLogs("lumacal.sync", "WARNING") as logs:
+        with self.assertLogs("events.sync", "WARNING") as logs:
             self.worker._execute(Task(NEW, 1, "a"))
         self.assertTrue(any("could not record failure" in line for line in logs.output))
         self.assertEqual(self.worker.status()["failed"], 1)
@@ -356,7 +373,7 @@ class ScheduleTest(SyncTestCase):
                 self.assertEqual(self.sync.is_due(f, NOW), expected)
 
     def test_refresh_intervals_come_from_settings(self):
-        settings = make_settings(temp_dir(self), REFRESH_SECONDS="60")
+        settings = make_settings(temp_dir(self), EVENTS_LUMA_INTERVAL="60")
         sync = Sync(self.store, settings, luma=self.luma, partiful=self.partiful, agihouse=self.agihouse, clock=self.clock)
         self.assertTrue(sync.is_due(feed(last_ok_at=NOW - 60), NOW))
 
@@ -407,7 +424,7 @@ class PullTest(SyncTestCase):
             return [listing("evt-1")]
 
         self.luma.events[CAL] = events
-        with self.assertLogs("lumacal.sync", "WARNING"):
+        with self.assertLogs("events.sync", "WARNING"):
             self.run_feed(KEY)
         self.assertEqual(self.luma.calls, [("calendar_events", CAL, "sess"), ("calendar_events", CAL, None)])
         self.assertIsNone(self.store.get_secret("luma_session"))
@@ -426,7 +443,7 @@ class PullTest(SyncTestCase):
             raise LumaError(401 if session_key else 429, "no")
 
         self.luma.events[CAL] = events
-        with self.assertLogs("lumacal.sync", "WARNING"), self.assertRaises(RateLimited):
+        with self.assertLogs("events.sync", "WARNING"), self.assertRaises(RateLimited):
             self.run_feed(KEY)
         self.assertEqual([c[2] for c in self.luma.calls[-2:]], ["sess", None], "the retry after a 401 is rate limited too")
 
@@ -460,7 +477,7 @@ class PullTest(SyncTestCase):
             with self.subTest(feed=key):
                 self.sign_in()
                 self.luma.following_result = self.luma.mine_result = LumaError(401, "expired")
-                with self.assertLogs("lumacal.sync", "WARNING"):
+                with self.assertLogs("events.sync", "WARNING"):
                     self.run_feed(key)
                 self.assertIsNone(self.store.get_secret("luma_session"))
 
@@ -532,7 +549,7 @@ class PullTest(SyncTestCase):
 
     def test_worker_failures_back_the_feed_off(self):
         self.luma.events[CAL] = LumaError(500, "oops")
-        with self.assertLogs("lumacal.sync", "WARNING"):
+        with self.assertLogs("events.sync", "WARNING"):
             self.sync.workers["luma"]._execute(Task(USER, 0, KEY))
         cal_feed = self.store.feed(KEY)
         self.assertEqual((cal_feed.failures, cal_feed.retry_at, cal_feed.last_error), (1, NOW + 600, "Luma 500: oops"))
@@ -541,7 +558,7 @@ class PullTest(SyncTestCase):
 
     def test_worker_requeues_rate_limited_pulls_without_a_failure(self):
         self.luma.events[CAL] = LumaError(429, "slow down")
-        with self.assertLogs("lumacal.sync", "WARNING"):
+        with self.assertLogs("events.sync", "WARNING"):
             self.sync.workers["luma"]._execute(Task(USER, 0, KEY))
         self.assertEqual(self.queued("luma"), {KEY: USER})
         self.assertEqual(self.store.feed(KEY).failures, 0)

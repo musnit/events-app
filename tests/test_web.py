@@ -4,13 +4,13 @@ import os
 import unittest
 from email.message import Message
 
-import lumacal
-from lumacal import web
-from lumacal.catalog import Catalog
-from lumacal.sources.luma import LumaError
-from lumacal.sources.partiful import PartifulError
-from lumacal.sync import NEW, USER, Sync
-from lumacal.web import Request
+import events
+from events import web
+from events.catalog import Catalog
+from events.sources.luma import LumaError
+from events.sources.partiful import PartifulError
+from events.sync import NEW, USER, Sync
+from events.web import Request
 
 from .helpers import (NOW, FakeAgiHouse, FakeClock, FakeLuma, FakePartiful, add_feed, calendar, fixture, jwt, listing,
                       make_settings, make_store, serve_raw, temp_dir)
@@ -76,7 +76,7 @@ class RoutingTest(WebTestCase):
     def test_health(self):
         resp = self.call("GET", "/api/health")
         self.assertEqual((resp.status, resp.content_type), (200, "application/json; charset=utf-8"))
-        self.assertEqual(self.json_of(resp), {"ok": True, "version": lumacal.__version__,
+        self.assertEqual(self.json_of(resp), {"ok": True, "version": events.__version__,
                                               "data_version": self.store.data_version()})
 
     def test_unknown_api_paths_are_json_404s(self):
@@ -110,7 +110,7 @@ class RoutingTest(WebTestCase):
 
     def test_unexpected_errors_are_500_without_details(self):
         self.luma.session_result = RuntimeError("secret detail")
-        with self.assertLogs("lumacal.web", "ERROR"):
+        with self.assertLogs("events.web", "ERROR"):
             resp = self.call("PUT", "/api/luma/session", {"session_key": "abc"})
         self.assertEqual((resp.status, self.json_of(resp)), (500, {"error": "internal error"}))
 
@@ -129,7 +129,7 @@ class SameOriginTest(WebTestCase):
             with self.subTest(site=site):
                 self.assertEqual(self.post({"Sec-Fetch-Site": site}), 200)
         # Proxies may rewrite Host, so a same-origin label outranks an Origin/Host mismatch...
-        self.assertEqual(self.post({"Sec-Fetch-Site": "same-origin", "Origin": "https://clawd.musnitzky.com",
+        self.assertEqual(self.post({"Sec-Fetch-Site": "same-origin", "Origin": "https://events.example.test",
                                     "Host": "127.0.0.1:8771"}), 200)
         # ...and a cross-site label outranks a matching Origin.
         self.assertEqual(self.post({"Sec-Fetch-Site": "cross-site", "Origin": "http://localhost:8771",
@@ -142,8 +142,8 @@ class SameOriginTest(WebTestCase):
         self.assertEqual(self.post({"Origin": "https://evil.example"}), 403, "no Host at all")
         self.assertEqual(self.post({"Origin": "http://localhost:8771", "Host": "localhost:8771"}), 200)
         self.assertEqual(self.post({"Host": "localhost:8771"}), 200, "no Origin: not a browser")
-        proxied = {"Origin": "https://clawd.musnitzky.com", "Host": "127.0.0.1:8771",
-                   "X-Forwarded-Host": "proxy.internal, clawd.musnitzky.com"}
+        proxied = {"Origin": "https://events.example.test", "Host": "127.0.0.1:8771",
+                   "X-Forwarded-Host": "proxy.internal, events.example.test"}
         self.assertEqual(self.post(proxied), 200, "any forwarded host counts")
         self.assertEqual(self.post(proxied | {"X-Forwarded-Host": "other.example"}), 403)
         self.assertEqual(self.post(proxied | {"Origin": "https://127.0.0.1:8771"}), 200, "Host still counts")
@@ -396,8 +396,14 @@ class LumaApiTest(WebTestCase):
         self.sync.reconcile()
         self.assertEqual(self.call("DELETE", "/api/luma/calendars/cal-missing").status, 404)
         self.assertEqual(self.call("DELETE", "/api/luma/calendars/agihouse").status, 404, "only Luma calendars")
+        # Your Luma follows (and the configuration) keep a calendar; only what was added here can go.
+        refused = self.call("DELETE", "/api/luma/calendars/cal-a")
+        self.assertEqual(refused.status, 409)
+        self.assertIn("your Luma follows", self.json_of(refused)["error"])
+        self.store.remove_calendar("cal-a", "followed")
+        self.store.upsert_calendar(calendar("cal-a"), "link")
         self.assertEqual(self.call("DELETE", "/api/luma/calendars/cal-a").status, 200)
-        self.assertIsNone(self.store.calendar("cal-a"), "every claim is dropped")
+        self.assertIsNone(self.store.calendar("cal-a"), "the import and link claims are both dropped")
         self.assertIsNone(self.store.feed("luma:cal-a"))
 
     def test_session_cookie(self):
@@ -514,9 +520,9 @@ class StatusTest(WebTestCase):
         self.store.set_pref("area", "bay")
         self.sync.reconcile()
         status = self.json_of(self.call("GET", "/api/status"))
-        self.assertEqual(status["version"], lumacal.__version__)
+        self.assertEqual(status["version"], events.__version__)
         self.assertEqual(status["luma"], {"session": True, "session_via": "cookie", "session_notice": None, "ics": None,
-                                          "calendars": 3, "calendars_by_origin": {"followed": 1, "import": 1, "link": 1},
+                                          "calendars": 3, "calendars_by_origin": {"followed": 1, "import": 1, "link": 1, "config": 0},
                                           "going_snapshot": 1})
         self.assertEqual(status["partiful"], {"accounts": [{"uid": "uid-1", "name": "Jordan", "added_at": NOW}], "feed": None})
         self.assertEqual(set(status["workers"]), {"luma", "partiful", "agihouse"})
@@ -544,7 +550,7 @@ class HandlerTest(WebTestCase):
         for name, value in web.SECURITY_HEADERS.items():
             self.assertEqual(headers[name], value)
         self.assertEqual(headers["Cache-Control"], "no-store")
-        self.assertEqual(headers["Server"], "luma-cal")
+        self.assertEqual(headers["Server"], "events")
         self.assertEqual(int(headers["Content-Length"]), len(body))
         self.assertTrue(json.loads(body)["ok"])
 

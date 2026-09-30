@@ -21,7 +21,7 @@ from .db import Database
 from .sources import scrub
 from .timeutil import to_iso
 
-ORIGINS = ("followed", "import", "link", "builtin")
+ORIGINS = ("followed", "import", "link", "config", "builtin")
 HISTORY_KEEP_DAYS = 60  # past events kept for the month view before pruning
 
 
@@ -240,6 +240,28 @@ class Store:
                 "ON CONFLICT(key) DO UPDATE SET source = excluded.source, kind = excluded.kind, "
                 "calendar_id = excluded.calendar_id, label = excluded.label",
                 (key, source, kind, calendar_id, label))
+
+    def reset_feed(self, key: str) -> None:
+        """Make a feed due now, as if never pulled."""
+        self.db.execute("UPDATE feeds SET last_attempt_at = NULL, last_ok_at = NULL, failures = 0, retry_at = NULL, "
+                        "last_error = NULL WHERE key = ?", (key,))
+
+    def update_calendar_details(self, cal: dict) -> bool:
+        """Refresh an existing calendar's name, picture, link and description (claims are unchanged).
+        Returns True when something changed."""
+        cal = scrub(cal)  # type: ignore[assignment]
+        with self.db.transaction() as conn:
+            row = conn.execute("SELECT name, avatar_url, url, description FROM calendars WHERE id = ?", (cal["id"],)).fetchone()
+            if row is None:
+                return False
+            merged = {k: (cal.get(k) if cal.get(k) not in (None, "") else row[k])
+                      for k in ("name", "avatar_url", "url", "description")}
+            if all(merged[k] == row[k] for k in merged):
+                return False
+            conn.execute("UPDATE calendars SET name = :name, avatar_url = :avatar_url, url = :url, "
+                         "description = :description WHERE id = :id", {"id": cal["id"], **merged})
+            self._bump(conn)
+            return True
 
     def delete_feed(self, key: str) -> None:
         with self.db.transaction() as conn:

@@ -3,8 +3,8 @@ import sqlite3
 import stat
 import unittest
 
-from lumacal import db as dbmod
-from lumacal.db import Database
+from events import db as dbmod
+from events.db import Database
 
 from .helpers import DAY, HOUR, NOW, FakeClock, add_feed, calendar, iso, listing, make_db, make_store, temp_dir
 
@@ -20,7 +20,7 @@ class DatabaseTest(unittest.TestCase):
                          "event_seen", "going", "marks", "prefs"} <= tables)
 
     def test_file_database_is_private(self):
-        path = temp_dir(self) / "data" / "lumacal.db"
+        path = temp_dir(self) / "data" / "events.db"
         db = make_db(self, path)
         self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
         self.assertEqual(stat.S_IMODE(os.stat(path.parent).st_mode), 0o700)

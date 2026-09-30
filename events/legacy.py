@@ -1,7 +1,8 @@
-"""One-time import of the JSON files the first version kept next to server.py.
+"""One-time import of the JSON files the first version kept next to its server.
 
-After a successful import the files move to ``data/legacy/`` so there is one source of truth; the
-old version can be restored from there if ever needed.
+Runs only when ``EVENTS_LEGACY_DIR`` names the directory holding them. After a successful import
+the files move to ``<state dir>/legacy/`` so there is one source of truth; the old version can be
+restored from there if ever needed.
 """
 from __future__ import annotations
 
@@ -61,11 +62,11 @@ def _event(old: dict) -> dict | None:
     }
 
 
-def migrate(store: Store, sync: Sync, root: Path, data_dir: Path) -> bool:
+def migrate(store: Store, sync: Sync, source_dir: Path, state_dir: Path) -> bool:
     """Import legacy files once. Returns True when anything was imported."""
     if store.get_meta("legacy_migrated_at"):
         return False
-    present = {key: root / name for key, name in FILES.items() if (root / name).is_file()}
+    present = {key: source_dir / name for key, name in FILES.items() if (source_dir / name).is_file()}
     if not present:
         store.set_meta("legacy_migrated_at", str(store.clock()))
         return False
@@ -106,7 +107,7 @@ def migrate(store: Store, sync: Sync, root: Path, data_dir: Path) -> bool:
     if isinstance(cache, dict):
         _import_cache(store, cache)
 
-    legacy_dir = data_dir / "legacy"
+    legacy_dir = state_dir / "legacy"
     legacy_dir.mkdir(parents=True, exist_ok=True)
     os.chmod(legacy_dir, 0o700)
     for path in present.values():

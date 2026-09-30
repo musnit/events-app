@@ -1,4 +1,4 @@
-"""luma-cal: one calendar of the Luma calendars you follow, your Partiful events and AGI House.
+"""events: one calendar of the Luma calendars you follow, your Partiful events and AGI House.
 
 The package is split by responsibility:
 
@@ -10,4 +10,4 @@ The package is split by responsibility:
 - ``web``         the HTTP server, JSON API and static files
 """
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
