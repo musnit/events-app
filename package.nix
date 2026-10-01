@@ -1,6 +1,6 @@
 # This package builds the server (Python, standard library only) and the web app it serves offline
-# from this directory, and runs both test suites. `nix build` builds it here; a NixOS module or a lab
-# imports it by path with pkgs.callPackage.
+# from this directory, and runs both test suites. `nix build` builds it here, and module.nix builds it
+# with the host's own nixpkgs through pkgs.callPackage.
 {
   lib,
   stdenvNoCC,

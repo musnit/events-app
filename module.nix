@@ -1,6 +1,6 @@
 # This NixOS module declares services.events and knows nothing about any particular lab. It turns
 # the package into a sandboxed systemd unit and translates options into the EVENTS_* environment
-# the program reads. A lab sets these options from its own module (default.nix).
+# the program reads. A host or a lab sets these options from its own configuration.
 {
   config,
   lib,
