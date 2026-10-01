@@ -158,9 +158,10 @@ Writes must be same-origin JSON (Sec-Fetch-Site/Origin checked); the portal in f
 - This repository is public. Tests and fixtures use made-up ids, names, venues, images and links (`evt-Fixture…`,
   `cal-FixtureBrainBay`), never data captured from the owner's accounts or a private event's link: a fixture
   recorded with a session shows which events the owner registered for.
-- Merge with `gh pr merge --rebase`. A merge commit made on GitHub carries the merging account's own email,
-  which is public, and GitHub refuses a noreply address as its author. Rebasing keeps each commit's author: the
-  noreply address in this checkout's git config.
+- Merge PRs locally: `git merge --no-ff` the PR branch into an up-to-date `main` and push it; GitHub then marks
+  the PR merged. Every merge method on GitHub (merge, squash, rebase) writes the merging account's own email into
+  public history and refuses a noreply address in its place. Local commits use the noreply address in this
+  checkout's git config. Turning on "Keep my email addresses private" for the account would make `gh pr merge` safe.
 - The API never returns secrets; feed URLs come back masked.
 - Calendar apps cannot subscribe to `/feed.ics` because the portal requires sign-in; it is a download.
 - Frontend TypeScript must stay erasable (no enums/namespaces) and import with `.ts` extensions, because
