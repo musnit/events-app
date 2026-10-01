@@ -7,8 +7,8 @@ from events.sources.luma import LumaClient, LumaError
 
 from .helpers import FakeRequest, fixture, response
 
-CAL_ID = "cal-oWJafai4qVBegex"
-ICS_URL = "https://api.lu.ma/ics/get?entity=user&id=usr-G7vZaxGDooL5N3W"
+CAL_ID = "cal-FixtureBrainBay"
+ICS_URL = "https://api.lu.ma/ics/get?entity=user&id=usr-FixtureOrg00001"
 
 
 def entries() -> list[dict]:
@@ -18,40 +18,40 @@ def entries() -> list[dict]:
 class NormalizeEntryTest(unittest.TestCase):
     def test_realistic_entry(self):
         ev = luma.normalize_entry(entries()[0])
-        self.assertEqual(ev["id"], "evt-zizE14OXoiWSD9q")
+        self.assertEqual(ev["id"], "evt-FixtureTalk0001")
         self.assertEqual(ev["source"], "luma")
-        self.assertEqual(ev["name"], "Sex, AI and the Future of Human Intimacy")
-        self.assertEqual(ev["url"], "https://luma.com/nmvb841b")
+        self.assertEqual(ev["name"], "Mind, AI and the Future of Human Memory")
+        self.assertEqual(ev["url"], "https://luma.com/fixtalk1")
         self.assertEqual((ev["start_at"], ev["end_at"]), ("2026-09-30T02:00:00Z", "2026-09-30T04:00:00Z"))
         self.assertFalse(ev["all_day"])
         self.assertEqual(ev["timezone"], "America/Los_Angeles")
-        self.assertEqual(ev["cover_url"], "https://images.lumacdn.com/uploads/y3/9450ca8e-cbfa-4552-95d5-b265da0d2f3e.png")
+        self.assertEqual(ev["cover_url"], "https://images.lumacdn.com/uploads/fixture/image-1.png")
         self.assertEqual(ev["location"], {
-            "type": "offline", "venue": "Era Lounge", "address": "386 S 1st St, San Jose", "city": "San Jose",
+            "type": "offline", "venue": "Fixture Hall", "address": "100 Fixture Ave, San Jose", "city": "San Jose",
             "neighborhood": "Downtown San Jose", "region": "CA", "country": "US",
-            "lat": 37.3303894, "lng": -121.88601169999998,
+            "lat": 37.3337, "lng": -121.8907,
         })
         self.assertEqual(ev["presenter"], {
-            "id": CAL_ID, "name": "Big Brain Lectures - Bay Area",
-            "avatar_url": "https://images.lumacdn.com/calendars/9i/454f12f2-420a-440b-b61e-cf2d4d2cd1be.jpg",
-            "url": "https://luma.com/Big-Brain-Bay", "description": "A lecture series hosted in The Bay's coolest spaces.",
+            "id": CAL_ID, "name": "Fixture Brain Lectures - Bay Area",
+            "avatar_url": "https://images.lumacdn.com/calendars/fixture/image-3.jpg",
+            "url": "https://luma.com/Fixture-Brain-Bay", "description": "A lecture series held in fixture venues around the Bay.",
         })
         # The organisation-looking host leads even though Luma listed the person first.
-        self.assertEqual([h["name"] for h in ev["hosts"]], ["Big Brain Bay Area", "Jordan Rivera"])
+        self.assertEqual([h["name"] for h in ev["hosts"]], ["Fixture Brain Bay Area", "Jordan Rivera"])
         self.assertEqual(ev["hosts"][1]["avatar_url"], "https://images.lumacdn.com/avatars/fixture/jordan.jpg")
         self.assertEqual(ev["tags"], ["All Ages", "San Jose"])
         self.assertEqual(ev["ticket"], {
-            "free": False, "price_cents": 2700, "max_price_cents": None, "currency": "usd", "sold_out": True,
+            "free": False, "price_cents": 1500, "max_price_cents": None, "currency": "usd", "sold_out": True,
             "spots_left": 0, "approval": False, "waitlist": False, "availability": "sold-out",
         })
-        self.assertEqual(ev["guest_count"], 103)
+        self.assertEqual(ev["guest_count"], 64)
         self.assertEqual(ev["going_status"], "approved")
 
     def test_venue_repeating_the_street_is_dropped(self):
         ev = luma.normalize_entry(entries()[1])
         self.assertIsNone(ev["location"]["venue"])
-        self.assertEqual(ev["location"]["address"], "500 Divisadero St, San Francisco")
-        self.assertEqual((ev["location"]["lat"], ev["location"]["lng"]), (37.7742011, -122.4373746),
+        self.assertEqual(ev["location"]["address"], "500 Fixture St, San Francisco")
+        self.assertEqual((ev["location"]["lat"], ev["location"]["lng"]), (37.7764, -122.4346),
                          "the event coordinate is used when place_coordinate is null")
         self.assertIsNone(ev["going_status"], "guest_info is null")
         self.assertEqual(ev["ticket"]["spots_left"], 101)
@@ -123,9 +123,9 @@ class CalendarTest(unittest.TestCase):
     def test_normalize_calendar_bare_wrapped_and_personal(self):
         bare = entries()[0]["calendar"]
         self.assertEqual(luma.normalize_calendar(bare), {
-            "id": CAL_ID, "source": "luma", "name": "Big Brain Lectures - Bay Area", "slug": "Big-Brain-Bay",
-            "avatar_url": bare["avatar_url"], "tint_color": "#7a0000", "url": "https://luma.com/Big-Brain-Bay",
-            "description": "A lecture series hosted in The Bay's coolest spaces.",
+            "id": CAL_ID, "source": "luma", "name": "Fixture Brain Lectures - Bay Area", "slug": "Fixture-Brain-Bay",
+            "avatar_url": bare["avatar_url"], "tint_color": "#7a0000", "url": "https://luma.com/Fixture-Brain-Bay",
+            "description": "A lecture series held in fixture venues around the Bay.",
         })
         self.assertEqual(luma.normalize_calendar({"calendar": bare, "follow": {}})["id"], CAL_ID)
         personal = luma.normalize_calendar({"calendar_api_id": "cal-personal00001", "name": "", "slug": "",
@@ -156,14 +156,14 @@ class CalendarTest(unittest.TestCase):
 
     def test_link_tokens(self):
         cases = {
-            "https://luma.com/Big-Brain-Bay?utm_source=share": ["Big-Brain-Bay"],
+            "https://luma.com/Fixture-Brain-Bay?utm_source=share": ["Fixture-Brain-Bay"],
             "see lu.ma/sf-ai-club and https://www.luma.com/frontier#events, also lu.ma/sf-ai-club": ["sf-ai-club", "frontier"],
-            "cal-oWJafai4qVBegex": ["cal-oWJafai4qVBegex"],
+            "cal-FixtureBrainBay": ["cal-FixtureBrainBay"],
             "http://lu.ma/genai-sf/": ["genai-sf"],
             "https://luma.com/user/someone": ["user/someone"],
-            "an event: https://luma.com/cisai-886g": ["cisai-886g"],
-            "https://luma.com/event/evt-FNsJLjeVNGCdNxs?tk=abc": ["evt-FNsJLjeVNGCdNxs"],
-            "evt-FNsJLjeVNGCdNxs and luma.com/event/evt-FNsJLjeVNGCdNxs": ["evt-FNsJLjeVNGCdNxs"],
+            "an event: https://luma.com/studio-opening": ["studio-opening"],
+            "https://luma.com/event/evt-PrivateEvent001?tk=abc": ["evt-PrivateEvent001"],
+            "evt-PrivateEvent001 and luma.com/event/evt-PrivateEvent001": ["evt-PrivateEvent001"],
             "evt-short": [],
             "hello world": [],
             "cal-short": [],
@@ -190,7 +190,7 @@ class IcsUrlTest(unittest.TestCase):
         self.assertEqual(luma.normalize_ics_url("webcal://api.luma.com/ics/get?entity=user&id=usr-1"),
                          "https://api.luma.com/ics/get?entity=user&id=usr-1")
         google = ("https://calendar.google.com/calendar/u/0/r?cid="
-                  "webcal%3A%2F%2Fapi.lu.ma%2Fics%2Fget%3Fentity%3Duser%26id%3Dusr-G7vZaxGDooL5N3W&pli=1")
+                  "webcal%3A%2F%2Fapi.lu.ma%2Fics%2Fget%3Fentity%3Duser%26id%3Dusr-FixtureOrg00001&pli=1")
         self.assertEqual(luma.normalize_ics_url(google), ICS_URL)
         self.assertEqual(luma.normalize_ics_url("https://lu.ma/ics/get?entity=user&id=usr-1"),
                          "https://lu.ma/ics/get?entity=user&id=usr-1")
@@ -208,10 +208,10 @@ class IcsUrlTest(unittest.TestCase):
 class PersonalFeedTest(unittest.TestCase):
     FEED = "\r\n".join([
         "BEGIN:VCALENDAR", "VERSION:2.0",
-        "BEGIN:VEVENT", "UID:evt-zizE14OXoiWSD9q@events.lu.ma",
+        "BEGIN:VEVENT", "UID:evt-FixtureTalk0001@events.lu.ma",
         "DTSTART;TZID=America/Los_Angeles:20260929T190000", "DTEND;TZID=America/Los_Angeles:20260929T210000",
-        r"SUMMARY:Sex\, AI and  the Future", "URL:https://luma.com/nmvb841b",
-        r"LOCATION:Era Lounge\, 386 S 1st St\, San Jose", "END:VEVENT",
+        r"SUMMARY:Mind\, AI and  the Future", "URL:https://luma.com/fixtalk1",
+        r"LOCATION:Fixture Hall\, 100 Fixture Ave\, San Jose", "END:VEVENT",
         "BEGIN:VEVENT", "UID:0f9c2b@luma.com", "DTSTART:20261014T170000Z", "SUMMARY:Intro to Evals",
         "LOCATION:https://zoom.us/j/123", r"DESCRIPTION:Manage: https://luma.com/event/manage/evt-fixtureOnline1\n",
         "END:VEVENT",
@@ -222,13 +222,13 @@ class PersonalFeedTest(unittest.TestCase):
 
     def test_parse_personal_feed(self):
         talk, online, allday = luma.parse_personal_feed(self.FEED)
-        self.assertEqual(talk["id"], "evt-zizE14OXoiWSD9q")
-        self.assertEqual(talk["name"], "Sex, AI and the Future")
-        self.assertEqual(talk["url"], "https://luma.com/nmvb841b")
+        self.assertEqual(talk["id"], "evt-FixtureTalk0001")
+        self.assertEqual(talk["name"], "Mind, AI and the Future")
+        self.assertEqual(talk["url"], "https://luma.com/fixtalk1")
         self.assertEqual((talk["start_at"], talk["end_at"], talk["all_day"]), ("2026-09-30T02:00:00Z", "2026-09-30T04:00:00Z", False))
         self.assertEqual(talk["timezone"], "America/Los_Angeles")
         self.assertEqual(talk["location"]["type"], "offline")
-        self.assertEqual(talk["location"]["address"], "Era Lounge, 386 S 1st St, San Jose")
+        self.assertEqual(talk["location"]["address"], "Fixture Hall, 100 Fixture Ave, San Jose")
         self.assertEqual(talk["going_status"], "registered")
 
         self.assertEqual(online["id"], "evt-fixtureOnline1", "the id is found in the description")
@@ -333,7 +333,7 @@ class LumaClientTest(unittest.TestCase):
         client, fake = self.client(handler)
         events = client.calendar_events(CAL_ID)
         self.assertEqual([e["id"] for e in events],
-                         ["evt-zizE14OXoiWSD9q", "evt-SsB1o08jHtQhpsY", "evt-fixtureOnline1", "evt-page2"])
+                         ["evt-FixtureTalk0001", "evt-FixtureTalk0002", "evt-fixtureOnline1", "evt-page2"])
         first, second = (kw["params"] for _, kw in fake.calls)
         self.assertEqual(first, {"calendar_api_id": CAL_ID, "period": "future", "pagination_limit": 50})
         self.assertEqual(second["pagination_cursor"], page1["next_cursor"])
@@ -372,7 +372,7 @@ class LumaClientTest(unittest.TestCase):
 
     def test_resolve_calendar_by_id(self):
         client, fake = self.client(lambda url, **kw: response({"entries": entries()[:1], "has_more": True, "next_cursor": "c"}))
-        self.assertEqual(client.resolve_calendar(CAL_ID)["slug"], "Big-Brain-Bay")
+        self.assertEqual(client.resolve_calendar(CAL_ID)["slug"], "Fixture-Brain-Bay")
         self.assertEqual(len(fake.calls), 1, "one page of one item is enough")
         self.assertEqual(fake.calls[0][1]["params"]["pagination_limit"], 1)
         client, _ = self.client(lambda url, **kw: response({"entries": []}))
@@ -388,8 +388,8 @@ class LumaClientTest(unittest.TestCase):
             "calendar": cal}}}}}
         html = f'<html><script id="__NEXT_DATA__" type="application/json">{json.dumps(page)}</script></html>'
         client, fake = self.client(lambda url, **kw: response(html, content_type="text/html; charset=utf-8"))
-        self.assertEqual(client.resolve_calendar("Big-Brain-Bay")["id"], CAL_ID, "the slug match wins over the first one")
-        self.assertEqual(fake.calls[0][0], "https://luma.com/Big-Brain-Bay")
+        self.assertEqual(client.resolve_calendar("Fixture-Brain-Bay")["id"], CAL_ID, "the slug match wins over the first one")
+        self.assertEqual(fake.calls[0][0], "https://luma.com/Fixture-Brain-Bay")
 
     def test_resolve_calendar_errors(self):
         client, fake = self.client(lambda url, **kw: response("{}"))
@@ -432,7 +432,7 @@ class LumaClientTest(unittest.TestCase):
         event_page = {"props": {"pageProps": {"initialData": {"kind": "event", "data": entry}}}}
         calendar_page = {"props": {"pageProps": {"initialData": {"kind": "calendar", "data": {"calendar": entry["calendar"]}}}}}
         pages = {f"https://luma.com/{slug}": f'<script id="__NEXT_DATA__" type="application/json">{json.dumps(page)}</script>'
-                 for slug, page in (("an-event", event_page), ("Big-Brain-Bay", calendar_page))}
+                 for slug, page in (("an-event", event_page), ("Fixture-Brain-Bay", calendar_page))}
         client, fake = self.client(lambda url, **kw: response(pages[url], content_type="text/html")
                                    if url in pages else response(entry))
         kind, found = client.resolve_link("an-event")
@@ -440,7 +440,7 @@ class LumaClientTest(unittest.TestCase):
         # The event's own calendar is on its page too, but a calendar is only what a calendar page names.
         with self.assertRaisesRegex(ValueError, "an event, not a calendar"):
             client.resolve_calendar("an-event")
-        self.assertEqual(client.resolve_link("Big-Brain-Bay"), ("calendar", client.resolve_calendar("Big-Brain-Bay")))
+        self.assertEqual(client.resolve_link("Fixture-Brain-Bay"), ("calendar", client.resolve_calendar("Fixture-Brain-Bay")))
         # An evt- id needs no page: the API answers for it directly.
         fake.calls.clear()
         kind, found = client.resolve_link(entry["event"]["api_id"])

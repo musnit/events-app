@@ -155,6 +155,12 @@ Writes must be same-origin JSON (Sec-Fetch-Site/Origin checked); the portal in f
 ## Gotchas
 
 - `events.db` holds the Luma session, Partiful refresh tokens and private feed URLs. Never commit `data/`.
+- This repository is public. Tests and fixtures use made-up ids, names, venues, images and links (`evt-Fixture…`,
+  `cal-FixtureBrainBay`), never data captured from the owner's accounts or a private event's link: a fixture
+  recorded with a session shows which events the owner registered for.
+- Merge with `gh pr merge --rebase`. A merge commit made on GitHub carries the merging account's own email,
+  which is public, and GitHub refuses a noreply address as its author. Rebasing keeps each commit's author: the
+  noreply address in this checkout's git config.
 - The API never returns secrets; feed URLs come back masked.
 - Calendar apps cannot subscribe to `/feed.ics` because the portal requires sign-in; it is a download.
 - Frontend TypeScript must stay erasable (no enums/namespaces) and import with `.ts` extensions, because

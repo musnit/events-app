@@ -20,15 +20,15 @@ LUMA_FEED = CRLF.join([
     "END:DAYLIGHT",
     "END:VTIMEZONE",
     "BEGIN:VEVENT",
-    "UID:evt-zizE14OXoiWSD9q@events.lu.ma",
+    "UID:evt-FixtureTalk0001@events.lu.ma",
     "DTSTAMP:20260929T120000Z",
     "DTSTART;TZID=America/Los_Angeles:20260929T190000",
     'DTEND;TZID="America/Los_Angeles":20260929T210000',
-    r"SUMMARY:Sex\, AI and the Future of Human Intimacy\; a talk",
-    r"DESCRIPTION:Get up-to-date information at: https://luma.com/nmvb841b\n\nHo",
-    " sted by Big Brain Bay Area",
-    r"LOCATION:Era Lounge\, 386 S 1st St\, San Jose",
-    "URL:https://luma.com/nmvb841b",
+    r"SUMMARY:Mind\, AI and the Future of Human Memory\; a talk",
+    r"DESCRIPTION:Get up-to-date information at: https://luma.com/fixtalk1\n\nHo",
+    " sted by Fixture Brain Bay Area",
+    r"LOCATION:Fixture Hall\, 100 Fixture Ave\, San Jose",
+    "URL:https://luma.com/fixtalk1",
     "BEGIN:VALARM",
     "ACTION:DISPLAY",
     "DESCRIPTION:Reminder",
@@ -116,17 +116,17 @@ class IcsReadTest(unittest.TestCase):
 
     def test_parse_reads_events_and_ignores_nested_components(self):
         events = ics.parse(LUMA_FEED)
-        self.assertEqual([e["UID"] for e in events], ["evt-zizE14OXoiWSD9q@events.lu.ma", "abc123@partiful", "allday-1"])
+        self.assertEqual([e["UID"] for e in events], ["evt-FixtureTalk0001@events.lu.ma", "abc123@partiful", "allday-1"])
         talk = events[0]
-        self.assertEqual(ics.unescape(talk["SUMMARY"]), "Sex, AI and the Future of Human Intimacy; a talk")
+        self.assertEqual(ics.unescape(talk["SUMMARY"]), "Mind, AI and the Future of Human Memory; a talk")
         # The folded description is joined, and VALARM's own DESCRIPTION/TRIGGER do not leak into the event.
         self.assertEqual(ics.unescape(talk["DESCRIPTION"]),
-                         "Get up-to-date information at: https://luma.com/nmvb841b\n\nHosted by Big Brain Bay Area")
+                         "Get up-to-date information at: https://luma.com/fixtalk1\n\nHosted by Fixture Brain Bay Area")
         self.assertNotIn("TRIGGER", talk)
         self.assertNotIn("ACTION", talk)
         self.assertEqual(talk["DTSTART__params"], {"TZID": "America/Los_Angeles"})
         self.assertEqual(talk["DTEND__params"], {"TZID": "America/Los_Angeles"}, "quotes around params are removed")
-        self.assertEqual(talk["URL"], "https://luma.com/nmvb841b", "values keep their own colons")
+        self.assertEqual(talk["URL"], "https://luma.com/fixtalk1", "values keep their own colons")
         self.assertEqual(events[2]["SUMMARY"], "Offsite", "property names are case-insensitive")
 
     def test_event_times_for_tzid_utc_and_all_day(self):
@@ -170,7 +170,7 @@ class IcsBuildTest(unittest.TestCase):
 
     def event(self, **fields) -> dict:
         ev = {"id": "evt-1", "name": "Talk", "start_at": "2026-09-30T02:00:00Z", "end_at": "2026-09-30T04:00:00Z",
-              "url": "https://luma.com/nmvb841b", "location": {}, "hosts": [], "presenter": None}
+              "url": "https://luma.com/fixtalk1", "location": {}, "hosts": [], "presenter": None}
         ev.update(fields)
         return ev
 
@@ -189,20 +189,20 @@ class IcsBuildTest(unittest.TestCase):
                 self.assertTrue(line[1:], "continuation lines carry content")
 
     def test_timed_event_fields(self):
-        text = self.build(self.event(name="Sex, AI; and more", location={"venue": "Era Lounge", "address": "386 S 1st St, San Jose"},
-                                     hosts=[{"name": "Big Brain Bay Area"}, {"name": "Jordan Rivera"}]),
+        text = self.build(self.event(name="Mind, AI; and more", location={"venue": "Fixture Hall", "address": "100 Fixture Ave, San Jose"},
+                                     hosts=[{"name": "Fixture Brain Bay Area"}, {"name": "Jordan Rivera"}]),
                           name="My events · Luma, Partiful")
         lines = text.split(CRLF)
         self.assertEqual(lines[:4], ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//events//EN", "CALSCALE:GREGORIAN"])
         self.assertIn(r"X-WR-CALNAME:My events · Luma\, Partiful", lines)
         for expected in ("UID:evt-1@luma-cal", "DTSTAMP:20260929T120000Z", "DTSTART:20260930T020000Z",
-                         "DTEND:20260930T040000Z", r"SUMMARY:Sex\, AI\; and more", "URL:https://luma.com/nmvb841b"):
+                         "DTEND:20260930T040000Z", r"SUMMARY:Mind\, AI\; and more", "URL:https://luma.com/fixtalk1"):
             self.assertIn(expected, lines)
         self.assertEqual(lines.count("BEGIN:VEVENT"), 1)
         self.assertEqual(lines[-2:], ["END:VCALENDAR", ""])
         parsed = ics.parse(text)[0]
-        self.assertEqual(ics.unescape(parsed["LOCATION"]), "Era Lounge, 386 S 1st St, San Jose")
-        self.assertEqual(ics.unescape(parsed["DESCRIPTION"]), "Big Brain Bay Area, Jordan Rivera\nhttps://luma.com/nmvb841b")
+        self.assertEqual(ics.unescape(parsed["LOCATION"]), "Fixture Hall, 100 Fixture Ave, San Jose")
+        self.assertEqual(ics.unescape(parsed["DESCRIPTION"]), "Fixture Brain Bay Area, Jordan Rivera\nhttps://luma.com/fixtalk1")
 
     def test_end_defaults_to_start_and_events_without_start_are_skipped(self):
         text = self.build(self.event(end_at=None), self.event(id="evt-2", start_at=None))
@@ -250,10 +250,10 @@ class IcsBuildTest(unittest.TestCase):
         self.assertEqual("".join(p[1:] if i else p for i, p in enumerate(parts)), "🎉" * 40)
 
     def test_description_names_the_presenting_calendar(self):
-        text = self.build(self.event(presenter={"id": "cal-x", "name": "Big Brain Lectures", "url": None},
+        text = self.build(self.event(presenter={"id": "cal-x", "name": "Fixture Brain Lectures", "url": None},
                                      hosts=[{"name": "Jordan Rivera"}]))
         self.assertEqual(ics.unescape(ics.parse(text)[0]["DESCRIPTION"]),
-                         "Big Brain Lectures\nJordan Rivera\nhttps://luma.com/nmvb841b")
+                         "Fixture Brain Lectures\nJordan Rivera\nhttps://luma.com/fixtalk1")
 
     def test_lone_surrogates_from_upstream_json_are_exportable(self):
         entry = json.loads(r'''{"event": {"api_id": "evt-1", "name": "Launch party \ud83c", "start_at": "2026-09-30T02:00:00Z"},
