@@ -1,7 +1,4 @@
----
-title: Find events from the calendars you follow
-description: See the upcoming events from the Luma calendars you follow, your Partiful invites and AGI House in one calendar, sorted by vibe and topic.
----
+# Events
 
 Events gathers every upcoming event from the Luma calendars you follow,
 your Partiful invites and the events of people you follow there, and AGI
@@ -41,8 +38,8 @@ on the **Sources** page:
   registrations. An event added by link shows whichever area you choose.
 
 The deployment can also name calendars that are always followed
-(`EVENTS_LUMA_CALENDARS`, `services.events.lumaCalendars`,
-`lab.events.lumaCalendars`). They work without any account, even before
+(`EVENTS_LUMA_CALENDARS`, or `services.events.lumaCalendars` in the NixOS
+module). They work without any account, even before
 anyone opens the app, and the app cannot remove them. AGI House's public
 events are included unless turned off.
 
@@ -55,11 +52,9 @@ error when it did not.
 ## Authentication and access
 
 The app has no sign-in of its own, so it binds to loopback behind a
-reverse proxy that authenticates every request. In the lab that proxy is
-the door, the box's front web server: it sends every visitor through the
-portal sign-in and admits the admins alone. Set
-`lab.proxy.apps.events.groups` to admit a directory group as well. The
-app has no per-person accounts. It shows one person's calendars, and
+reverse proxy that authenticates every request. On the devbox that proxy
+is the portal sign-in, which admits the box's administrators. The app has
+no per-person accounts. It shows one person's calendars, and
 everyone it admits sees and changes the same connections and choices.
 
 Writes must come from the app's own pages: the server refuses
@@ -76,10 +71,8 @@ connect. Those are the Luma session cookie, Partiful refresh tokens and
 private iCal links. Its directory is readable by the service alone
 (mode 0700). The API never returns a credential, and iCal links come back
 masked. Removing a connection on the Sources page deletes its
-credential. In the lab the database is `lab.events.dataDir`
-(`/persist/events`), encrypted and backed up with the rest of the box's
-state. A new box starts empty: run the bookmarklets once against it, or
-restore the directory from its backup.
+credential. A new install starts empty: run the bookmarklets once
+against it, or restore the directory from a backup.
 
 ## Limits
 
@@ -154,12 +147,7 @@ package.nix           the Nix build, offline, which runs both test suites
 module.nix            the NixOS module services.events, a sandboxed systemd unit
 standalone-test.nix   the VM test of module.nix alone (the flake's vm check)
 flake.nix             the standalone flake
-default.nix           the lab's wiring of lab.events to an endpoint, the door and state
-test.nix              the lab's VM test, which agent-lab's flake check runs
 ```
-
-`default.nix` and `test.nix` are evaluated only inside agent-lab, where
-this directory is `public/modules/events/`.
 
 ## Develop
 

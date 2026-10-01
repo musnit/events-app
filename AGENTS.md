@@ -3,8 +3,7 @@
 One calendar of every upcoming event across the Luma calendars musnit follows, musnit's Partiful events
 and AGI House. Luma's public API only covers calendars you *manage*, and Partiful has none, so the
 app reads the same internal endpoints their websites use. Everything upstream is unofficial.
-README.md is the user-facing documentation (it doubles as the agent-lab docs page); this file is for
-working on the code and is never copied to the lab.
+README.md is the user-facing documentation; this file is for working on the code.
 
 ## Layout
 
@@ -22,9 +21,8 @@ working on the code and is never copied to the lab.
 - State lives in `EVENTS_STATE_DIR` (default `~/.local/state/events`; on devbox the gitignored `data/`, 0700):
   `events.db` (events, sources, **secrets**, prefs) and `legacy/` (v1 files after import).
 - Nix: `package.nix` (offline build running both test suites), `module.nix` (`services.events`),
-  `flake.nix` + `standalone-test.nix` (the module's VM test). `default.nix` + `test.nix` are the agent-lab
-  half (`lab.events`) and only evaluate inside agent-lab as `public/modules/events/` (see Hosting).
-- `scripts/check.sh` runs the non-Nix checks; `scripts/lab-export.sh` copies the app into an agent-lab checkout.
+  `flake.nix` + `standalone-test.nix` (the module's VM test).
+- `scripts/check.sh` runs the non-Nix checks.
 
 ## Commands
 
@@ -131,18 +129,28 @@ Writes must be same-origin JSON (Sec-Fetch-Site/Origin checked); the portal in f
 ## Hosting
 
 - **devbox (current)**: prototype `events` → https://events.devbox.musnitzky.com/ (portal sign-in required).
-  It runs `python3 -m events` from the main checkout `/home/lab/events-app` as user unit
+  It runs `python3 server.py` from the main checkout `/home/lab/events-app` as user unit
   `prototype-events.service`, with `EVENTS_LISTEN` built from the helper's `HOST`/`PORT` and
   `EVENTS_STATE_DIR=/home/lab/events-app/data`. To deploy: `git -C /home/lab/events-app pull --ff-only`,
   `npm --prefix /home/lab/events-app/web ci && npm --prefix /home/lab/events-app/web run build`,
   `prototype restart events`; check `prototype logs events`. Never point it at a T3 worktree.
-- **agent-lab (next, for the NAS)**: the lab keeps its apps in `public/modules/<app>/`, so the app is copied
-  there: `scripts/lab-export.sh ~/agent-lab` on a lab branch, then a lab pull request that a human merges.
-  The copy is the committed tree minus `.gitattributes`' export-ignore list. Make changes here and export
-  again; never edit the lab copy. Before exporting, check the lab half in a scratch clone:
-  `git clone -q ~/agent-lab /tmp/lab && scripts/lab-export.sh /tmp/lab && git -C /tmp/lab add -A &&
-  nix build /tmp/lab#checks.x86_64-linux.events`. Everything exported is the lab's shareable stack:
-  no names, hosts or domains in code, tests or README.md; a lab sets its calendars through `lab.events.*`.
+- **agent-lab (later, for the NAS, once the app matures)**: this repository stays the app's only home. Never
+  copy the app into agent-lab, even though the lab's AGENTS.md puts the programs it hosts in
+  `public/modules/<app>/`; the owner does not want a duplicated codebase. The lab pins this repo as a flake
+  input instead (with `inputs.nixpkgs.follows = "nixpkgs"`), imports `nixosModules.default`, and keeps only its
+  wiring in agent-lab: the endpoint, the door entry, a `lab.state` entry, the NAS's `enable`, and a lab VM test.
+  The wiring and test written for an earlier copy are in this repo's history at `f1b684a` (`default.nix`,
+  `test.nix`); port them into agent-lab. Three constraints shape that PR:
+  - This repo is private, and the NAS reads GitHub only through its host key, a deploy key scoped to agent-lab
+    (GitHub refuses one deploy key on two repos). Before the move the owner either makes this repo public
+    (`github:musnit/events-app`; its history holds no state or credential files) or gives the box a read-only
+    credential for it. The devbox's Nix already fetches `git+https://github.com/musnit/events-app` through
+    git's GitHub login, so local CI works either way.
+  - It belongs in the lab layer (`lab/`), not the shareable stack (`public/`), because the repo is private
+    and the app is personal.
+  - Only the NAS should import the module. A module every host imports makes every box fetch the input, and
+    the other boxes cannot read the repo. mkLab has no per-host modules yet, so this needs a small stack
+    change to hand a module to one host.
 
 ## Gotchas
 

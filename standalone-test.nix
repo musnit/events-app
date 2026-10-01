@@ -1,8 +1,7 @@
 # This VM test checks the generic module alone (the flake's `vm` check). From empty state the
 # sandboxed unit serves the app, follows the calendars named in its configuration without any help
 # and keeps its state to itself, and a restart keeps what was chosen in the app. The VM has no
-# internet, so every pull fails and backs off while the app keeps serving. The lab's own test is
-# test.nix.
+# internet, so every pull fails and backs off while the app keeps serving.
 { ... }:
 {
   name = "events-module";

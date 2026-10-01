@@ -5,8 +5,8 @@
 #   nix flake check               # the package and a VM test of the NixOS module
 #   imports = [ inputs.events.nixosModules.default ]; services.events.enable = true;
 #
-# A lab does not go through this file: it imports package.nix and module.nix by path
-# (default.nix) so they share the lab's nixpkgs pin.
+# Another flake, such as a lab's, takes this one as an input with `inputs.nixpkgs.follows = "nixpkgs"`
+# and imports nixosModules.default; module.nix builds the package with the host's own nixpkgs.
 {
   description = "The events app and its NixOS module";
 
