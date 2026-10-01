@@ -136,21 +136,17 @@ Writes must be same-origin JSON (Sec-Fetch-Site/Origin checked); the portal in f
   `prototype restart events`; check `prototype logs events`. Never point it at a T3 worktree.
 - **agent-lab (later, for the NAS, once the app matures)**: this repository stays the app's only home. Never
   copy the app into agent-lab, even though the lab's AGENTS.md puts the programs it hosts in
-  `public/modules/<app>/`; the owner does not want a duplicated codebase. The lab pins this repo as a flake
-  input instead (with `inputs.nixpkgs.follows = "nixpkgs"`), imports `nixosModules.default`, and keeps only its
-  wiring in agent-lab: the endpoint, the door entry, a `lab.state` entry, the NAS's `enable`, and a lab VM test.
+  `public/modules/<app>/`; the owner does not want a duplicated codebase. The repo is public, so the lab pins it
+  as a flake input with no credential: `github:musnit/events-app`, with `inputs.nixpkgs.follows = "nixpkgs"`.
+  Only the lab's wiring lives in agent-lab, in the lab layer (`lab/`) rather than the shareable stack, because the
+  app is personal:
+  - `lab/flake.nix` takes the input and hands `nixosModules.default` to every host through mkLab's `extraModules`;
+  - a lab module adds the endpoint, the door entry and a `lab.state` entry;
+  - the NAS host sets `enable`;
+  - a VM test under `lab/tests/` is listed in the lab flake's checks.
+
   The wiring and test written for an earlier copy are in this repo's history at `f1b684a` (`default.nix`,
-  `test.nix`); port them into agent-lab. Three constraints shape that PR:
-  - This repo is private, and the NAS reads GitHub only through its host key, a deploy key scoped to agent-lab
-    (GitHub refuses one deploy key on two repos). Before the move the owner either makes this repo public
-    (`github:musnit/events-app`; its history holds no state or credential files) or gives the box a read-only
-    credential for it. The devbox's Nix already fetches `git+https://github.com/musnit/events-app` through
-    git's GitHub login, so local CI works either way.
-  - It belongs in the lab layer (`lab/`), not the shareable stack (`public/`), because the repo is private
-    and the app is personal.
-  - Only the NAS should import the module. A module every host imports makes every box fetch the input, and
-    the other boxes cannot read the repo. mkLab has no per-host modules yet, so this needs a small stack
-    change to hand a module to one host.
+  `test.nix`); port them into agent-lab.
 
 ## Gotchas
 
