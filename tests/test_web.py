@@ -187,10 +187,10 @@ class EventsApiTest(WebTestCase):
         self.assertTrue(self.json_of(changed)["events"][0]["starred"])
 
     def test_event_ics_download(self):
-        self.add_events(listing("evt-1", name="Sex, AI & the Future?"), listing("evt-2", name="東京"))
+        self.add_events(listing("evt-1", name="Mind, AI & the Future?"), listing("evt-2", name="東京"))
         resp = self.call("GET", "/api/events/evt-1/ics")
         self.assertEqual((resp.status, resp.content_type), (200, "text/calendar; charset=utf-8"))
-        self.assertEqual(resp.headers["Content-Disposition"], 'attachment; filename="Sex-AI-the-Future.ics"')
+        self.assertEqual(resp.headers["Content-Disposition"], 'attachment; filename="Mind-AI-the-Future.ics"')
         self.assertEqual(resp.headers["Cache-Control"], "no-store")
         self.assertIn(b"UID:evt-1@luma-cal", resp.body)
         self.assertIn(b"DTSTAMP:20260929T120000Z", resp.body)
@@ -347,8 +347,8 @@ class LumaApiTest(WebTestCase):
         self.assertEqual(self.luma.calls, [("check_session", "sess-1")])
         self.assertEqual(self.store.get_secret("luma_session"), {"session_key": "sess-1", "via": "bookmarklet"})
         self.assertEqual(self.store.going(), {"evt-1": "registered"})
-        self.assertEqual(self.store.calendar("cal-oWJafai4qVBegex")["origins"], ["import"])
-        self.assertEqual(self.queued("luma"), {"luma:cal-oWJafai4qVBegex": NEW, "luma:cal-other0000001": NEW,
+        self.assertEqual(self.store.calendar("cal-FixtureBrainBay")["origins"], ["import"])
+        self.assertEqual(self.queued("luma"), {"luma:cal-FixtureBrainBay": NEW, "luma:cal-other0000001": NEW,
                                                "luma:following": NEW, "luma:mine": NEW})
 
         again = self.call("POST", "/api/luma/import", self.import_payload(calendars=self.import_payload()["payload"]["calendars"][:1],
@@ -375,23 +375,23 @@ class LumaApiTest(WebTestCase):
         self.assertEqual(self.store.calendars(), [])
 
     def test_add_calendars_and_events_by_link(self):
-        EVT = "evt-FNsJLjeVNGCdNxs"
-        self.luma.resolved = {"Big-Brain-Bay": calendar("cal-oWJafai4qVBegex", "Big Brain"),
+        EVT = "evt-PrivateEvent001"
+        self.luma.resolved = {"Fixture-Brain-Bay": calendar("cal-FixtureBrainBay", "Fixture Brain"),
                               "nope": ValueError("Luma has no page there"),
                               "busy": LumaError(429, "slow down")}
-        self.luma.event_links = {"cisai-886g": listing(EVT, name="CISAI Opening", start=iso(24 * 50))}
+        self.luma.event_links = {"studio-opening": listing(EVT, name="Studio Opening", start=iso(24 * 50))}
         resp = self.call("POST", "/api/luma/links",
-                         {"text": "https://luma.com/Big-Brain-Bay lu.ma/nope https://luma.com/cisai-886g "
+                         {"text": "https://luma.com/Fixture-Brain-Bay lu.ma/nope https://luma.com/studio-opening "
                                   "https://luma.com/user/x lu.ma/busy"})
         self.assertEqual(self.json_of(resp), {
-            "added": [{"kind": "calendar", "id": "cal-oWJafai4qVBegex", "name": "Big Brain"},
-                      {"kind": "event", "id": EVT, "name": "CISAI Opening"}],
+            "added": [{"kind": "calendar", "id": "cal-FixtureBrainBay", "name": "Fixture Brain"},
+                      {"kind": "event", "id": EVT, "name": "Studio Opening"}],
             "failed": [{"link": "nope", "error": "Luma has no page there"},
                        {"link": "user/x", "error": "not a calendar or event link"},
                        {"link": "busy", "error": "Luma 429: slow down"}]})
-        self.assertEqual(self.store.calendar("cal-oWJafai4qVBegex")["origins"], ["link"])
+        self.assertEqual(self.store.calendar("cal-FixtureBrainBay")["origins"], ["link"])
         # The new calendar is pulled next; the event arrived with its link and shows at once.
-        self.assertEqual(self.queued("luma"), {"luma:cal-oWJafai4qVBegex": NEW})
+        self.assertEqual(self.queued("luma"), {"luma:cal-FixtureBrainBay": NEW})
         added = next(e for e in self.json_of(self.call("GET", "/api/events"))["events"] if e["id"] == EVT)
         self.assertTrue(added["linked"])
         self.assertEqual(added["calendar_ids"], ["luma-links"])
@@ -399,10 +399,10 @@ class LumaApiTest(WebTestCase):
         self.assertEqual(self.call("POST", "/api/luma/links", {}).status, 400)
 
     def test_remove_an_event_added_by_link(self):
-        EVT = "evt-FNsJLjeVNGCdNxs"
-        self.sync.link_event(listing(EVT, name="CISAI Opening"))
+        EVT = "evt-PrivateEvent001"
+        self.sync.link_event(listing(EVT, name="Studio Opening"))
         status = self.json_of(self.call("GET", "/api/status"))["luma"]
-        self.assertEqual(status["linked_events"], [{"id": EVT, "name": "CISAI Opening",
+        self.assertEqual(status["linked_events"], [{"id": EVT, "name": "Studio Opening",
                                                     "url": f"https://luma.com/{EVT}", "last_error": None}])
         self.assertEqual(self.call("DELETE", f"/api/luma/events/{EVT}").status, 200)
         self.assertEqual(self.call("DELETE", f"/api/luma/events/{EVT}").status, 404)

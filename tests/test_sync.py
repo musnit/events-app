@@ -564,13 +564,13 @@ class PullTest(SyncTestCase):
         self.assertEqual(self.store.feed(KEY).failures, 0)
 
 
-EVT = "evt-FNsJLjeVNGCdNxs"
+EVT = "evt-PrivateEvent001"
 EVT_KEY = f"luma:{EVT}"
 
 
 class LinkedEventTest(SyncTestCase):
     def test_an_event_added_by_link_shows_at_once_and_stays_current(self):
-        self.sync.link_event(listing(EVT, name="Opening (save the date)", start=iso(24 * 50)))
+        self.sync.link_event(listing(EVT, name="Studio opening (save the date)", start=iso(24 * 50)))
         self.assertEqual(self.listed(), {EVT: "luma-links"})
         self.assertIn("luma-links", self.calendar_ids())
         link_feed = self.store.feed(EVT_KEY)

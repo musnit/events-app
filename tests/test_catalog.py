@@ -10,7 +10,7 @@ from events.sync import LUMA_MINE
 
 from .helpers import HOUR, FakeClock, add_feed, iso, listing, make_store
 
-SF = empty_location("offline") | {"venue": "Madrone Art Bar", "address": "500 Divisadero St, San Francisco",
+SF = empty_location("offline") | {"venue": "Madrone Art Bar", "address": "500 Fixture St, San Francisco",
                                   "city": "San Francisco", "region": "CA", "country": "US"}
 
 
@@ -20,7 +20,7 @@ class CatalogTestCase(unittest.TestCase):
         self.store = make_store(self, self.clock)
         self.catalog = Catalog(self.store, clock=self.clock)
         self.cal_a = add_feed(self.store, "luma:cal-a", calendar_id="cal-a", name="SF AI Club")
-        self.cal_b = add_feed(self.store, "luma:cal-b", calendar_id="cal-b", name="Big Brain Lectures")
+        self.cal_b = add_feed(self.store, "luma:cal-b", calendar_id="cal-b", name="Fixture Brain Lectures")
         self.store.upsert_calendar(LUMA_MINE, "builtin")
         self.store.ensure_feed("luma:ics", source="luma", kind="luma-ics", calendar_id="luma-mine", label="iCal")
         self.store.upsert_calendar(agihouse.CALENDAR, "builtin")
@@ -111,7 +111,7 @@ class BuildTest(CatalogTestCase):
         self.assertFalse(muted["cal-a"])
 
     def test_derived_fields_and_marks(self):
-        self.store.replace_listings(self.cal_b, [listing("evt-talk", name="Why Chimpanzees Can't Give Lectures", location=SF,
+        self.store.replace_listings(self.cal_b, [listing("evt-talk", name="Why Octopuses Can't Give Lectures", location=SF,
                                                          guest_count=103)])
         self.store.set_mark("evt-talk", starred=True, hidden=True)
         ev = self.events()["evt-talk"]
