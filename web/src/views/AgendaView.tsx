@@ -2,9 +2,10 @@ import { useCallback } from "react";
 import { EventList } from "../components/EventList.tsx";
 import { Link } from "../components/Link.tsx";
 import { Page } from "../components/Page.tsx";
+import { agendaIncludes } from "../lib/agenda.ts";
 import { addDays, dayKey, parseDayKey, startOfDay, weekendStart, type DayKey } from "../lib/dates.ts";
 import { filtersToParams } from "../lib/filters.ts";
-import { fmtDayLong, fmtDayShort, hasEnded } from "../lib/format.ts";
+import { fmtDayLong, fmtDayShort } from "../lib/format.ts";
 import { href } from "../lib/routes.ts";
 import type { EventItem } from "../lib/types.ts";
 import { useData } from "../state/data.ts";
@@ -31,12 +32,9 @@ export function AgendaView({ from }: { from: DayKey | null }) {
   const { catalog, loading } = useData();
   const now = useNow();
   const fromDate = from ? parseDayKey(from) : null;
-  const start = fromDate ? fromDate.getTime() : now;
   const scope = useCallback(
-    (ev: EventItem) => (fromDate ? Date.parse(ev.start_at) >= start : !hasEnded(ev, start)),
-    // fromDate is derived from `from`
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [from, start],
+    (ev: EventItem) => agendaIncludes(ev, from, now),
+    [from, now],
   );
   const { events, counts } = useFilteredEvents(filters, { scope });
   const today = startOfDay(new Date(now));
@@ -74,7 +72,8 @@ export function AgendaView({ from }: { from: DayKey | null }) {
         </label>
       </div>
       {loading && !catalog ? <LoadingCards /> : (
-        <EventList events={events} resetKey={`${from}|${filtersToParams(filters)}`} empty={<NoEvents route={route} filters={filters} />} />
+        <EventList events={events} resetKey={`${from}|${filtersToParams(filters)}`}
+          ongoingBefore={fromDate ? undefined : dayKey(today)} empty={<NoEvents route={route} filters={filters} />} />
       )}
     </Page>
   );
