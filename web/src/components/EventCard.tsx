@@ -1,9 +1,7 @@
 import { memo, useState, type ReactNode } from "react";
-import { eventHasExactTime } from "../lib/event-time.ts";
 import { isNew } from "../lib/filters.ts";
 import { eventZoneNote, fmtPrice, fmtTimeRange, hasEnded, isHappeningNow, whereLine } from "../lib/format.ts";
 import { imgUrl } from "../lib/images.ts";
-import { researchWhen } from "../lib/research.ts";
 import { href } from "../lib/routes.ts";
 import type { EventItem } from "../lib/types.ts";
 import { data, useData } from "../state/data.ts";
@@ -43,7 +41,7 @@ function Badges({ ev, newSince }: { ev: EventItem; newSince: number | null }): R
   const price = fmtPrice(ev.ticket);
   return (
     <>
-      {eventHasExactTime(ev) && isHappeningNow(ev) && <span className="badge live">Now</span>}
+      {isHappeningNow(ev) && <span className="badge live">Now</span>}
       {ev.going && <span className="badge going"><Icon name="check" size={13} />Going</span>}
       {isNew(ev, newSince) && <span className="badge new">New</span>}
       {price && <span className={`badge price${ev.ticket?.sold_out ? " soldout" : ""}`}>{price}</span>}
@@ -63,7 +61,7 @@ export const EventCard = memo(function EventCard({ ev, showDate, dateLabel }: Pr
   const primary = ev.vibes[0];
   const calendarName = ev.calendar_ids.map((id) => catalog?.calendarsById.get(id)?.name).find(Boolean);
   const { names, avatars } = hostLine(ev, calendarName);
-  const zoneNote = ev.research ? null : eventZoneNote(ev);
+  const zoneNote = eventZoneNote(ev);
   const where = whereLine(ev);
   const ended = hasEnded(ev);
   const categories = [
@@ -76,7 +74,7 @@ export const EventCard = memo(function EventCard({ ev, showDate, dateLabel }: Pr
       <Cover ev={ev} size={96} />
       <div className="event-body">
         <div className="event-when">
-          <span>{ev.research && ev.source === "research" ? researchWhen(ev.research) : `${showDate && dateLabel ? `${dateLabel} · ` : ""}${fmtTimeRange(ev)}`}</span>
+          <span>{showDate && dateLabel ? `${dateLabel} · ` : ""}{fmtTimeRange(ev)}</span>
           {zoneNote && <span className="zone-note">({zoneNote})</span>}
         </div>
         <h3 className="event-title">

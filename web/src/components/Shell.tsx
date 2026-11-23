@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { dayKey, monthKey } from "../lib/dates.ts";
+import type { Filters } from "../lib/filters.ts";
 import { href, type Route } from "../lib/routes.ts";
 import { useData } from "../state/data.ts";
 import { useLocation } from "../state/router.ts";
@@ -19,7 +20,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { label: "Upcoming", icon: "list", route: { name: "agenda", from: null }, match: ["agenda", "day"], phone: true },
   { label: "Month", icon: "grid", route: { name: "month", month: "" }, match: ["month"], phone: true },
-  { label: "Mumbai", icon: "pin", route: { name: "mumbai" }, match: ["mumbai", "research"], phone: true },
+  { label: "Cape Town", icon: "pin", route: { name: "cape-town" }, match: ["cape-town"], phone: true },
   { label: "Saved", icon: "star", route: { name: "saved" }, match: ["saved"], phone: true },
   { label: "Calendars", icon: "calendars", route: { name: "calendars" }, match: ["calendars", "calendar"], phone: false },
   { label: "Sources", icon: "settings", route: { name: "sources", section: null }, match: ["sources"], phone: true },
@@ -29,20 +30,25 @@ const NAV: NavItem[] = [
 const SlotContext = createContext<HTMLElement | null>(null);
 export const useSidebarSlot = () => useContext(SlotContext);
 
-function navHref(item: NavItem, keepFilters: boolean, filters: ReturnType<typeof useLocation>["filters"]): string {
+function navHref(item: NavItem, filters: Filters | undefined): string {
   const route = item.route.name === "month" ? { name: "month" as const, month: monthKey(new Date()) } : item.route;
-  return href(route, keepFilters ? filters : undefined);
+  // Upcoming follows the saved area; the Cape Town tab is the way into Cape Town.
+  return href(route, filters && item.route.name === "agenda" ? { ...filters, area: null } : filters);
 }
 
 export function Shell({ children, activeRoute }: { children: ReactNode; activeRoute: Route }) {
   const [slot, setSlot] = useState<HTMLElement | null>(null);
-  const { filters } = useLocation();
+  const location = useLocation();
   const route = activeRoute;
   const { catalog } = useData();
   const savedCount = catalog?.events.filter((e) => (e.starred || e.going) && Date.parse(e.end_at || e.start_at) > Date.now()).length ?? 0;
-  const active = (item: NavItem) => item.match.includes(route.name);
+  // A day or a later date opened from the Cape Town tab is still Cape Town.
+  const filters: Filters = route.name === "cape-town" ? { ...location.filters, area: "cape-town" } : location.filters;
+  const inCapeTown = filters.area === "cape-town" && ["cape-town", "agenda", "day"].includes(route.name);
+  const active = (item: NavItem) => item.route.name === "cape-town" ? inCapeTown : item.match.includes(route.name) && !(inCapeTown && item.route.name === "agenda");
   // Filters carry between list views, so switching Upcoming ↔ Month keeps the same vibe.
-  const keep = ["agenda", "day", "month"].includes(route.name);
+  const keep = ["agenda", "day", "month", "cape-town"].includes(route.name);
+  const kept = (item: NavItem) => keep && ["agenda", "month", "cape-town"].includes(item.route.name) ? filters : undefined;
 
   return (
     <SlotContext.Provider value={slot}>
@@ -55,7 +61,7 @@ export function Shell({ children, activeRoute }: { children: ReactNode; activeRo
           </Link>
           <nav className="side-nav" aria-label="Main">
             {NAV.map((item) => (
-              <Link key={item.label} to={navHref(item, keep && item.match.some((m) => ["agenda", "month"].includes(m)), filters)}
+              <Link key={item.label} to={navHref(item, kept(item))}
                 className={active(item) ? "active" : ""} aria-current={active(item) ? "page" : undefined}>
                 <Icon name={item.icon} filled={item.icon === "star" && active(item)} />
                 <span>{item.label}</span>
@@ -72,7 +78,7 @@ export function Shell({ children, activeRoute }: { children: ReactNode; activeRo
         </div>
         <nav className="tab-bar" aria-label="Main">
           {NAV.filter((n) => n.phone).map((item) => (
-            <Link key={item.label} to={navHref(item, keep && item.match.some((m) => ["agenda", "month"].includes(m)), filters)}
+            <Link key={item.label} to={navHref(item, kept(item))}
               className={active(item) ? "active" : ""} aria-current={active(item) ? "page" : undefined}>
               <Icon name={item.icon} filled={item.icon === "star" && active(item)} size={22} />
               <span>{item.label}</span>

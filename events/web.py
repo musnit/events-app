@@ -21,14 +21,14 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import __version__, ics
+from . import __version__, ics, net
 from .catalog import Catalog
 from .config import Settings
-from .research import can_export, event_from_entry
 from .sources import luma as luma_src
 from .sources import partiful as partiful_src
+from .sources import sundry as sundry_src
 from .store import Store
-from .sync import Sync, linked_feed
+from .sync import SUNDRY_FEED, Sync, linked_feed
 from .timeutil import to_iso
 
 log = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ SECURITY_HEADERS = {
 CSP = ("default-src 'self'; img-src 'self' https: data:; style-src 'self'; script-src 'self'; connect-src 'self'; "
        "manifest-src 'self'; worker-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; "
        "form-action 'self'; frame-ancestors 'none'")
-AREAS = ("bay", "bay-online", "all", "mumbai")
+AREAS = ("bay", "bay-online", "cape-town", "all")
 
 
 class ApiError(Exception):
@@ -137,7 +137,6 @@ class App:
         r("GET", "/api/health", self.health)
         r("GET", "/api/events", self.events)
         r("GET", "/api/events/{event_id}/ics", self.event_ics)
-        r("GET", "/api/research/{entry_id}/ics", self.research_ics)
         r("PUT", "/api/events/{event_id}/mark", self.mark_event)
         r("GET", "/api/status", self.status)
         r("POST", "/api/sync", self.refresh)
@@ -154,6 +153,8 @@ class App:
         r("DELETE", "/api/partiful/accounts/{uid}", self.partiful_remove_account)
         r("PUT", "/api/partiful/feed", self.partiful_set_feed)
         r("DELETE", "/api/partiful/feed", self.partiful_clear_feed)
+        r("PUT", "/api/sundry/session", self.sundry_set_session)
+        r("DELETE", "/api/sundry/session", self.sundry_clear_session)
         r("GET", "/feed.ics", self.feed_ics)
 
     # ---------- dispatch ----------
@@ -221,21 +222,6 @@ class App:
 
     def event_ics(self, req: Request) -> Response:
         ev = self._event(req.params["event_id"])
-        if ev.get("source") == "research" and not can_export(ev["research"]):
-            raise ApiError(400, "research calendar export requires a confirmed start and end time")
-        return self._ics_response(ev)
-
-    def research_ics(self, req: Request) -> Response:
-        for collection in self.store.research_collections():
-            for entry in collection["entries"]:
-                if entry["id"] != req.params["entry_id"]:
-                    continue
-                if not can_export(entry):
-                    raise ApiError(400, "research calendar export requires a recommended entry with confirmed start and end times")
-                return self._ics_response(event_from_entry(entry, collection))
-        raise ApiError(404, "no such research entry")
-
-    def _ics_response(self, ev: dict) -> Response:
         body = ics.build([ev], name=ev["name"], now_iso=to_iso(self.store.clock())).encode("utf-8", "replace")
         safe = re.sub(r"[^A-Za-z0-9_-]+", "-", ev["name"]).strip("-")[:60] or "event"
         return Response(200, body, "text/calendar; charset=utf-8",
@@ -250,20 +236,7 @@ class App:
             raise ApiError(400, "starred and hidden must be true or false")
         if starred is None and hidden is None:
             raise ApiError(400, "nothing to change")
-        event_id = req.params["event_id"]
-        aliases = {event_id}
-        for event in self.catalog.build()["events"]:
-            entries = event.get("research_entries", [event["research"]] if event.get("research") else [])
-            ids = {event["id"], *(entry["id"] for entry in entries)}
-            if event_id in ids:
-                aliases.update(ids)
-                break
-        # Keep an explicit edit consistent across research/source aliases. A source may
-        # appear or disappear on the next pull; its researched event keeps the same mark.
-        with self.store.db.transaction():
-            for alias in sorted(aliases):
-                self.store.set_mark(alias, starred=starred, hidden=hidden)
-        return json_response(self.store.marks().get(event_id, {"starred": False, "hidden": False}))
+        return json_response(self.store.set_mark(req.params["event_id"], starred=starred, hidden=hidden))
 
     def feed_ics(self, req: Request) -> Response:
         scope = req.arg("scope", "mine")
@@ -301,6 +274,8 @@ class App:
                                    "last_error": errors.get(linked_feed(e["event_id"]))} for e in self.store.linked_events()],
             },
             "partiful": {"accounts": accounts, "feed": mask((feed_cfg or {}).get("url"))},
+            "sundry": {"enabled": self.settings.sundry, "session": bool(self.store.get_secret("substack_session")),
+                       "locked": self._sundry_locked()},
             "workers": self.sync.status(),
             "feeds": feeds,
             "prefs": self.store.prefs(),
@@ -308,7 +283,7 @@ class App:
 
     def refresh(self, req: Request) -> Response:
         source = req.json().get("source")
-        if source not in (None, "luma", "partiful", "agihouse"):
+        if source not in (None, *self.sync.workers):
             raise ApiError(400, "unknown source")
         return json_response({"queued": self.sync.refresh(source)})
 
@@ -427,6 +402,36 @@ class App:
     def luma_clear_ics(self, req: Request) -> Response:
         self.store.delete_secret("luma_ics")
         self.sync.sources_changed()
+        return json_response({"ok": True})
+
+    # ---------- Sundry Mag ----------
+
+    def _sundry_locked(self) -> list[str]:
+        try:
+            locked = json.loads(self.store.get_meta("sundry_locked") or "[]")
+        except ValueError:
+            return []
+        return [str(title) for title in locked] if isinstance(locked, list) else []
+
+    def sundry_set_session(self, req: Request) -> Response:
+        try:
+            sid = sundry_src.parse_session(str(req.json().get("session") or ""))
+        except ValueError as e:
+            raise ApiError(400, str(e)) from None
+        try:
+            pull = self.sync.sundry.events(sid)
+        except (sundry_src.SundryError, net.NetError) as e:
+            raise ApiError(400, f"Could not read Sundry Mag with that session: {e}") from None
+        if pull.locked:
+            raise ApiError(400, "Substack still sends only the opening of this week's post with that session. "
+                                "Check that the account is subscribed to Sundry Mag and copy the cookie again.")
+        self.store.set_secret("substack_session", {"sid": sid})
+        self.sync.sources_changed(refresh=[SUNDRY_FEED])
+        return json_response({"ok": True, "events": len(pull.events)})
+
+    def sundry_clear_session(self, req: Request) -> Response:
+        self.store.delete_secret("substack_session")
+        self.sync.sources_changed(refresh=[SUNDRY_FEED])
         return json_response({"ok": True})
 
     # ---------- Partiful ----------

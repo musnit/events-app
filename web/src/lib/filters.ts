@@ -1,8 +1,7 @@
 // Event filters. They live in the URL query so every filtered view can be bookmarked and shared.
 
 import { type TimeOfDay } from "./dates.ts";
-import { eventHasExactTime, eventIsWeekend, eventTimeOfDay } from "./event-time.ts";
-import { researchSearchText } from "./research.ts";
+import { eventIsWeekend, eventTimeOfDay } from "./event-time.ts";
 import type { AreaChoice, CalendarItem, EventItem } from "./types.ts";
 
 export interface Filters {
@@ -37,7 +36,7 @@ export const TIMES: { id: TimeOfDay; label: string; hint: string }[] = [
 export const AREA_CHOICES: { id: AreaChoice; label: string }[] = [
   { id: "bay", label: "Bay Area" },
   { id: "bay-online", label: "Bay Area + online" },
-  { id: "mumbai", label: "Mumbai" },
+  { id: "cape-town", label: "Cape Town" },
   { id: "all", label: "Everywhere" },
 ];
 
@@ -115,8 +114,7 @@ export function searchText(ev: EventItem, calendars: Map<string, CalendarItem>):
     const loc = ev.location;
     text = [
       ev.name, ev.presenter?.name, ...ev.hosts.map((h) => h.name), ...ev.tags, loc.venue, loc.address, loc.city,
-      ...(ev.research_entries ?? (ev.research ? [ev.research] : [])).map(researchSearchText),
-      loc.neighborhood, ...ev.calendar_ids.map((id) => calendars.get(id)?.name),
+      loc.neighborhood, ev.description, ...ev.calendar_ids.map((id) => calendars.get(id)?.name),
     ].filter(Boolean).join(" \u0000 ").toLowerCase();
     searchCache.set(ev, text);
   }
@@ -129,7 +127,7 @@ export function isNew(ev: EventItem, newSince: number | null): boolean {
 
 export function inArea(ev: EventItem, area: AreaChoice): boolean {
   if (area === "all") return true;
-  if (area === "mumbai") return ev.area === "mumbai";
+  if (area === "cape-town") return ev.area === "cape-town";
   if (ev.area === "bay") return true;
   return area === "bay-online" && ev.area === "online";
 }
@@ -140,8 +138,8 @@ type Facet = "vibes" | "topics" | "times" | "zones" | "sizes";
 export function matchEvent(ev: EventItem, f: Filters, ctx: MatchContext, skip?: Facet): boolean {
   if (!f.hidden && (ev.hidden || ev.muted)) return false;
   const area = f.area ?? ctx.area;
-  // Mumbai is a strict destination view: a manually linked SF event must not leak in.
-  if ((area === "mumbai" || !ev.linked) && !inArea(ev, area)) return false;
+  // A destination is strict: an event added by link in San Francisco does not show up in Cape Town.
+  if ((area === "cape-town" || !ev.linked) && !inArea(ev, area)) return false;
   if (f.going && !ev.going) return false;
   if (f.free && !ev.ticket?.free) return false;
   if (f.open && ev.ticket?.sold_out) return false;
@@ -149,7 +147,7 @@ export function matchEvent(ev: EventItem, f: Filters, ctx: MatchContext, skip?: 
   if (f.weekend && !eventIsWeekend(ev)) return false;
   if (skip !== "vibes" && f.vibes.length && !f.vibes.some((v) => ev.vibes.includes(v))) return false;
   if (skip !== "topics" && f.topics.length && !f.topics.some((t) => ev.topics.includes(t))) return false;
-  if (skip !== "times" && f.times.length && (ev.all_day || !eventHasExactTime(ev) || !f.times.includes(eventTimeOfDay(ev)))) return false;
+  if (skip !== "times" && f.times.length && (ev.all_day || !f.times.includes(eventTimeOfDay(ev)))) return false;
   if (skip !== "zones" && f.zones.length && !(ev.zone && f.zones.includes(ev.zone))) return false;
   if (skip !== "sizes" && f.sizes.length && !(ev.size && f.sizes.includes(ev.size))) return false;
   if (f.q.trim()) {
@@ -170,7 +168,7 @@ export function facetCounts(events: EventItem[], f: Filters, ctx: MatchContext):
   for (const ev of events) {
     if (matchEvent(ev, f, ctx, "vibes")) ev.vibes.forEach((v) => bump("vibes", v));
     if (matchEvent(ev, f, ctx, "topics")) ev.topics.forEach((t) => bump("topics", t));
-    if (!ev.all_day && eventHasExactTime(ev) && matchEvent(ev, f, ctx, "times")) bump("times", eventTimeOfDay(ev));
+    if (!ev.all_day && matchEvent(ev, f, ctx, "times")) bump("times", eventTimeOfDay(ev));
     if (matchEvent(ev, f, ctx, "zones")) bump("zones", ev.zone);
     if (matchEvent(ev, f, ctx, "sizes")) bump("sizes", ev.size);
   }

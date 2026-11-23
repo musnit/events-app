@@ -82,4 +82,6 @@ export const api = {
   partifulRemove: (uid: string) => send<{ ok: true }>("DELETE", `api/partiful/accounts/${encodeURIComponent(uid)}`),
   partifulSetFeed: (url: string) => send<{ ok: true; events: number }>("PUT", "api/partiful/feed", { url }),
   partifulClearFeed: () => send<{ ok: true }>("DELETE", "api/partiful/feed"),
+  sundrySetSession: (session: string) => send<{ ok: true; events: number }>("PUT", "api/sundry/session", { session }),
+  sundryClearSession: () => send<{ ok: true }>("DELETE", "api/sundry/session"),
 };

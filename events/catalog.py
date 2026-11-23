@@ -17,7 +17,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from . import areas, categorize
-from .research import can_export, canonical_url, event_from_entry
 from .sources.luma import LINKED_CALENDAR
 from .store import Store
 from .timeutil import parse_iso, to_iso
@@ -25,8 +24,8 @@ from .timeutil import parse_iso, to_iso
 HISTORY_DAYS = 45  # enough for the month view to show earlier weeks of the current month
 # Which listing supplies an event's details when several feeds list it.
 FEED_RICHNESS = {"calendar": 6, "luma-event": 6, "luma-mine": 5, "partiful-mine": 4, "partiful-following": 4, "agihouse": 3,
-                 "partiful-feed": 2, "luma-ics": 1}
-SOURCE_RANK = {"luma": 0, "partiful": 1, "agihouse": 2}
+                 "partiful-feed": 2, "sundry": 2, "luma-ics": 1}
+SOURCE_RANK = {"luma": 0, "partiful": 1, "agihouse": 2, "sundry": 3}
 DUPLICATE_WINDOW_S = 3 * 3600
 DUPLICATE_SIMILARITY = 0.6
 
@@ -95,8 +94,6 @@ class Catalog:
             events.append(ev)
 
         events = self._merge_duplicates(events)
-        collections = self.store.research_collections()
-        self._attach_research(events, collections, to_iso(now - HISTORY_DAYS * 86400))
 
         for ev in events:
             ev["area"], ev["zone"] = areas.classify(ev)
@@ -110,17 +107,6 @@ class Catalog:
             # You asked for an event added by link, so the area filter leaves it in.
             ev["linked"] = LINKED_CALENDAR["id"] in ev["calendar_ids"]
         events.sort(key=lambda e: (e["start_at"], e["name"]))
-
-        # Editorial entries stay addressable when they have no schedule, are outside the
-        # history window, or have been folded into an upstream event with a different id.
-        researched = {entry["id"]: ev for ev in events
-                      for entry in ev.get("research_entries", [ev["research"]] if ev.get("research") else [])}
-        for collection in collections:
-            for entry in collection["entries"]:
-                ev = researched.get(entry["id"])
-                entry["event_id"] = ev["id"] if ev else None
-                entry["starred"] = ev["starred"] if ev else bool(marks.get(entry["id"], {}).get("starred"))
-                entry["hidden"] = ev["hidden"] if ev else bool(marks.get(entry["id"], {}).get("hidden"))
 
         upcoming_cutoff = to_iso(now)
         counts: dict[str, int] = {}
@@ -139,40 +125,8 @@ class Catalog:
                 "last_ok_at": to_iso(feed.last_ok_at) if feed and feed.last_ok_at else None,
                 "last_error": feed.last_error if feed else None,
             })
-        for collection in collections:
-            cid = "research:" + collection["id"]
-            cal_out.append({"id": cid, "source": "research", "name": collection["title"], "avatar_url": None,
-                            "url": None, "tint_color": None, "description": collection["intro"],
-                            "origins": ["research"], "muted": cid in muted, "upcoming_count": counts.get(cid, 0),
-                            "last_ok_at": None, "last_error": None})
         return {"generated_at": to_iso(now), "events": events, "calendars": cal_out, "taxonomy": categorize.taxonomy(),
-                "zones": [{"id": k, "label": v} for k, v in areas.ZONES.items()], "research_collections": collections}
-
-    @staticmethod
-    def _attach_research(events: list[dict], collections: list[dict], cutoff: str) -> None:
-        """Attach notes by exact URL identity; never fuzzy-merge researched talks or cities."""
-        by_url: dict[str, list[dict]] = {}
-        for ev in events:
-            urls = {canonical_url(ev.get("url")), *(canonical_url(item.get("url")) for item in ev["also_on"])}
-            for url in urls - {""}:
-                by_url.setdefault(url, []).append(ev)
-        for collection in collections:
-            for entry in collection["entries"]:
-                matches = by_url.get(canonical_url(entry["url"]), [])
-                if len(matches) == 1:
-                    ev = matches[0]
-                    if "research" not in ev:
-                        ev["research"] = entry
-                        ev["research_entries"] = []
-                        ev["collection_ids"] = []
-                    ev["research_entries"].append(entry)
-                    ev["collection_ids"] = sorted(set(ev["collection_ids"]) | {collection["id"]})
-                    ev["calendar_ids"] = sorted(set(ev["calendar_ids"]) | {"research:" + collection["id"]})
-                    ev["merged_ids"].append(entry["id"])
-                    continue
-                ev = event_from_entry(entry, collection)
-                if ev and (ev["end_at"] or ev["start_at"]) >= cutoff:
-                    events.append(ev)
+                "zones": [{"id": k, "label": v} for k, v in areas.ZONES.items()]}
 
     @staticmethod
     def _merge_duplicates(events: list[dict]) -> list[dict]:
@@ -225,7 +179,6 @@ class Catalog:
         events = self.build()["events"]
         now = to_iso(self.clock() - 86400)
         chosen = [e for e in events if (e.get("end_at") or e["start_at"]) >= now and not e["hidden"] and not e["muted"]]
-        chosen = [e for e in chosen if e.get("source") != "research" or can_export(e["research"])]
         if starred_or_going:
             chosen = [e for e in chosen if e["going"] or e["starred"]]
         return chosen

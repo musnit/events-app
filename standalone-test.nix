@@ -19,6 +19,7 @@
           "https://luma.com/unreachable"
         ];
         agihouse = false;
+        sundry = false;
       };
       environment.systemPackages = [ pkgs.curl ];
     };

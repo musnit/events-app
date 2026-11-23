@@ -9,10 +9,12 @@ from events import web
 from events.catalog import Catalog
 from events.sources.luma import LumaError
 from events.sources.partiful import PartifulError
+from events.sources.sundry import Pull as SundryPull
+from events.sources.sundry import SundryError
 from events.sync import NEW, USER, Sync
 from events.web import Request
 
-from .helpers import (NOW, FakeAgiHouse, FakeClock, FakeLuma, FakePartiful, add_feed, calendar, fixture, iso, jwt, listing,
+from .helpers import (NOW, FakeAgiHouse, FakeClock, FakeLuma, FakePartiful, FakeSundry, add_feed, calendar, fixture, iso, jwt, listing,
                       make_settings, make_store, serve_raw, temp_dir)
 
 INDEX_HTML = ('<!doctype html><html><head><meta charset="utf-8" /><base href="/" /><title>luma-cal</title></head>'
@@ -33,6 +35,8 @@ def request(method: str, path: str, body: object = None, *, raw: bytes | None = 
 
 
 class WebTestCase(unittest.TestCase):
+    ENV: dict[str, str] = {}
+
     def setUp(self):
         self.root = temp_dir(self)
         self.web_dir = self.root / "web"
@@ -43,10 +47,10 @@ class WebTestCase(unittest.TestCase):
         (self.root / "secret.txt").write_text("TOP SECRET")
         self.clock = FakeClock()
         self.store = make_store(self, self.clock)
-        self.luma, self.partiful, self.agihouse = FakeLuma(), FakePartiful(), FakeAgiHouse()
-        settings = make_settings(self.root)
+        self.luma, self.partiful, self.agihouse, self.sundry = FakeLuma(), FakePartiful(), FakeAgiHouse(), FakeSundry()
+        settings = make_settings(self.root, **self.ENV)
         self.sync = Sync(self.store, settings, luma=self.luma, partiful=self.partiful, agihouse=self.agihouse,
-                         clock=self.clock)
+                         sundry=self.sundry, clock=self.clock)
         self.catalog = Catalog(self.store, clock=self.clock)
         self.app = web.App(settings, self.store, self.sync, self.catalog)
 
@@ -244,53 +248,16 @@ class PrefsTest(WebTestCase):
         self.assertEqual(self.json_of(self.call("PUT", "/api/prefs", {})), expected)
         self.assertEqual(self.json_of(self.call("PUT", "/api/prefs", {"muted_calendars": []}))["muted_calendars"], [])
 
-    def test_mumbai_area_preference(self):
-        response = self.call("PUT", "/api/prefs", {"area": "mumbai"})
-        self.assertEqual(response.status, 200)
-        self.assertEqual(self.json_of(response), {"area": "mumbai"})
-
-    def test_research_marks_follow_source_alias_and_can_be_cleared(self):
-        from .test_research import collection
-
-        self.store.import_research(collection())
-        self.call("PUT", "/api/events/fixture-research-talk/mark", {"starred": True})
-        self.add_events(listing("evt-source", url="https://luma.com/fixture-science"))
-        response = self.call("PUT", "/api/events/evt-source/mark", {"starred": False})
-        self.assertEqual(response.status, 200)
-        self.assertFalse(self.catalog.build()["events"][0]["starred"])
-        self.call("PUT", "/api/events/evt-source/mark", {"starred": True})
-        self.assertTrue(self.store.marks()["fixture-research-talk"]["starred"])
-        self.assertTrue(self.store.marks()["evt-source"]["starred"])
-
-    def test_research_export_uses_editorial_schedule_when_upstream_differs(self):
-        from .test_research import collection, entry
-
-        self.store.import_research(collection())
-        self.add_events(listing("evt-source", url=entry()["url"], start=iso(25), end=iso(27)))
-        editorial = self.call("GET", "/api/research/fixture-research-talk/ics")
-        upstream = self.call("GET", "/api/events/evt-source/ics")
-        self.assertEqual(editorial.status, 200)
-        self.assertIn("DTSTART:20260930T120000Z", editorial.body.decode())
-        self.assertIn("DTSTART:20260930T130000Z", upstream.body.decode())
-        self.assertEqual(self.call("GET", "/api/research/missing/ics").status, 404)
-
-    def test_research_exports_reject_approximate_missing_end_and_rejected_entries(self):
-        from .test_research import collection, entry
-
-        for change in ({"schedule_status": "approximate"}, {"end_at": None}, {"priority": "skip"}):
-            with self.subTest(change=change):
-                self.store.import_research(collection(entry(**change)))
-                self.assertEqual(self.call("GET", "/api/research/fixture-research-talk/ics").status, 400)
-                self.assertNotIn("fixture-research-talk@", self.call("GET", "/feed.ics", query={"scope": ["all"]}).body.decode())
-        self.store.import_research(collection(entry(schedule_status="approximate")))
-        self.assertEqual(self.call("GET", "/api/events/fixture-research-talk/ics").status, 400)
+    def test_cape_town_area_preference(self):
+        response = self.call("PUT", "/api/prefs", {"area": "cape-town"})
+        self.assertEqual((response.status, self.json_of(response)), (200, {"area": "cape-town"}))
 
     def test_invalid_prefs(self):
         cases = [({"muted_calendars": "cal-a"}, "muted_calendars must be a list"),
                  ({"muted_calendars": [1]}, "muted_calendars must be a list"),
                  ({"muted_calendars": ["x" * 200]}, "muted_calendars must be a list"),
                  ({"muted_calendars": None}, "muted_calendars must be a list"),
-                 ({"area": "mars"}, "area must be one of bay, bay-online, all"),
+                 ({"area": "mars"}, "area must be one of bay, bay-online, cape-town, all"),
                  ({"area": None}, "area must be one of")]
         for body, message in cases:
             with self.subTest(body=body):
@@ -585,7 +552,7 @@ class StatusTest(WebTestCase):
                                           "calendars": 3, "calendars_by_origin": {"followed": 1, "import": 1, "link": 1, "config": 0},
                                           "going_snapshot": 1, "linked_events": []})
         self.assertEqual(status["partiful"], {"accounts": [{"uid": "uid-1", "name": "Jordan", "added_at": NOW}], "feed": None})
-        self.assertEqual(set(status["workers"]), {"luma", "partiful", "agihouse"})
+        self.assertEqual(set(status["workers"]), {"luma", "partiful", "agihouse", "sundry"})
         self.assertIn("luma:following", [f["key"] for f in status["feeds"]])
         self.assertEqual(status["prefs"], {"area": "bay"})
         body = json.dumps(status)
@@ -596,6 +563,50 @@ class StatusTest(WebTestCase):
         self.store.set_meta("luma_session_notice", "Luma signed this app out.")
         status = self.json_of(self.call("GET", "/api/status"))
         self.assertEqual((status["luma"]["session"], status["luma"]["session_notice"]), (False, "Luma signed this app out."))
+
+
+class SundryApiTest(WebTestCase):
+    ENV = {"EVENTS_SUNDRY": "1"}
+    SID = "s%3AFixtureSessionValue0123456789.abcDEF"
+
+    def week(self) -> list[dict]:
+        return [listing("sundry-0000000000000001", source="sundry", name="Fixture Market", timezone="Africa/Johannesburg",
+                        location={"type": "offline", "venue": "Fixture Yard", "address": None, "city": "Cape Town",
+                                  "neighborhood": None, "region": "Western Cape", "country": "ZA", "lat": None, "lng": None})]
+
+    def test_session_is_checked_saved_and_never_returned(self):
+        self.sync.reconcile()
+        self.sundry.pull = SundryPull(self.week())
+        response = self.call("PUT", "/api/sundry/session", {"session": f"substack.sid={self.SID}"})
+        self.assertEqual((response.status, self.json_of(response)), (200, {"ok": True, "events": 1}))
+        self.assertEqual(self.sundry.sessions, [self.SID])
+        self.assertEqual(self.store.get_secret("substack_session"), {"sid": self.SID})
+        self.assertEqual(self.queued("sundry"), {"sundry": NEW})
+        status = self.call("GET", "/api/status")
+        self.assertEqual(self.json_of(status)["sundry"], {"enabled": True, "session": True, "locked": []})
+        self.assertNotIn(b"FixtureSessionValue", status.body)
+        self.assertEqual(self.call("DELETE", "/api/sundry/session").status, 200)
+        self.assertIsNone(self.store.get_secret("substack_session"))
+
+    def test_a_session_that_does_not_unlock_the_post_is_refused(self):
+        self.sundry.pull = SundryPull(self.week(), ["Fixture week"])
+        response = self.call("PUT", "/api/sundry/session", {"session": self.SID})
+        self.assertEqual(response.status, 400)
+        self.assertIn("only the opening", self.json_of(response)["error"])
+        self.assertIsNone(self.store.get_secret("substack_session"))
+        self.sundry.pull = SundryError("Substack answered 503 for /api/v1/archive")
+        self.assertIn("Substack answered 503", self.json_of(self.call("PUT", "/api/sundry/session", {"session": self.SID}))["error"])
+        for bad in ("", "nope", None):
+            self.assertEqual(self.call("PUT", "/api/sundry/session", {"session": bad}).status, 400)
+
+    def test_status_reports_a_locked_week_and_refresh_takes_the_source(self):
+        self.sync.reconcile()
+        self.store.set_meta("sundry_locked", json.dumps(["Fixture week"]))
+        self.assertEqual(self.json_of(self.call("GET", "/api/status"))["sundry"],
+                         {"enabled": True, "session": False, "locked": ["Fixture week"]})
+        self.assertEqual(self.json_of(self.call("POST", "/api/sync", {"source": "sundry"})), {"queued": 1})
+        self.store.set_meta("sundry_locked", "not json")
+        self.assertEqual(self.json_of(self.call("GET", "/api/status"))["sundry"]["locked"], [])
 
 
 class HandlerTest(WebTestCase):

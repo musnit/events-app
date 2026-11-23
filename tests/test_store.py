@@ -19,6 +19,33 @@ class DatabaseTest(unittest.TestCase):
         self.assertTrue({"meta", "secrets", "partiful_accounts", "calendars", "calendar_origins", "feeds", "listings",
                          "event_seen", "going", "marks", "prefs"} <= tables)
 
+    def test_a_database_that_held_research_drops_it_and_a_saved_mumbai_area(self):
+        """Deployed databases reached version 3 while the Mumbai section existed."""
+        path = temp_dir(self) / "events.db"
+        old = Database(path)
+        with old.transaction() as conn:
+            for number, script in enumerate(dbmod.MIGRATIONS[:3], start=1):
+                for statement in dbmod._statements(script):
+                    conn.execute(statement)
+                conn.execute(f"PRAGMA user_version = {number}")
+            conn.execute("INSERT INTO research_collections (id, data, updated_at) VALUES ('fixture', '{}', 0)")
+            conn.execute("INSERT INTO prefs (key, value) VALUES ('area', '\"mumbai\"'), ('muted_calendars', '[\"cal-a\"]')")
+        old.close()
+        db = make_db(self, path)
+        tables = {r["name"] for r in db.query("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        self.assertNotIn("research_collections", tables)
+        self.assertEqual([tuple(r) for r in db.query("SELECT key, value FROM prefs")], [("muted_calendars", '["cal-a"]')])
+        other = temp_dir(self) / "bay.db"
+        kept = Database(other)
+        with kept.transaction() as conn:
+            for script in dbmod.MIGRATIONS[:3]:
+                for statement in dbmod._statements(script):
+                    conn.execute(statement)
+            conn.execute("PRAGMA user_version = 3")
+            conn.execute("INSERT INTO prefs (key, value) VALUES ('area', '\"bay-online\"')")
+        kept.close()
+        self.assertEqual(make_db(self, other).query_one("SELECT value FROM prefs WHERE key = 'area'")[0], '"bay-online"')
+
     def test_file_database_is_private(self):
         path = temp_dir(self) / "data" / "events.db"
         db = make_db(self, path)

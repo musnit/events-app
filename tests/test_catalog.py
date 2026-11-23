@@ -144,7 +144,7 @@ class BuildTest(CatalogTestCase):
         self.store.record_failure(self.cal_b, "Luma 500: oops", 600)
         self.store.replace_listings("agihouse", [])
         payload = self.catalog.build()
-        self.assertEqual(set(payload), {"generated_at", "events", "calendars", "taxonomy", "zones", "research_collections"})
+        self.assertEqual(set(payload), {"generated_at", "events", "calendars", "taxonomy", "zones"})
         self.assertEqual(payload["generated_at"], iso(0))
         self.assertEqual(payload["taxonomy"], categorize.taxonomy())
         self.assertEqual([z["id"] for z in payload["zones"]], ["sf", "peninsula", "south-bay", "east-bay", "north-bay"])

@@ -68,11 +68,14 @@ class Settings:
     # Luma calendars to follow from configuration: links, slugs or cal- ids.
     luma_calendars: tuple[str, ...]
     agihouse: bool
+    # Sundry Mag's weekly Cape Town list.
+    sundry: bool
     # How old a source's last pull may get before the scheduler pulls it again.
     luma_interval: float
     personal_interval: float  # Luma followed list, registrations and iCal feed
     partiful_interval: float
     agihouse_interval: float
+    sundry_interval: float
     # Pauses between Luma requests. Luma answers bursts with 429s.
     luma_spacing: float
     manual_spacing: float
@@ -92,10 +95,12 @@ class Settings:
             legacy_dir=Path(legacy) if legacy else None,
             luma_calendars=tuple(dict.fromkeys(t for t in re.split(r"[\s,]+", env.get("EVENTS_LUMA_CALENDARS", "")) if t)),
             agihouse=_flag(env, "EVENTS_AGIHOUSE"),
+            sundry=_flag(env, "EVENTS_SUNDRY"),
             luma_interval=_number(env, "EVENTS_LUMA_INTERVAL", 4 * HOUR, minimum=60),
             personal_interval=_number(env, "EVENTS_PERSONAL_INTERVAL", 1 * HOUR, minimum=60),
             partiful_interval=_number(env, "EVENTS_PARTIFUL_INTERVAL", 1 * HOUR, minimum=60),
             agihouse_interval=_number(env, "EVENTS_AGIHOUSE_INTERVAL", 2 * HOUR, minimum=60),
+            sundry_interval=_number(env, "EVENTS_SUNDRY_INTERVAL", 6 * HOUR, minimum=60),
             luma_spacing=_number(env, "EVENTS_LUMA_SPACING", 15),
             manual_spacing=_number(env, "EVENTS_MANUAL_SPACING", 2),
             sync_enabled=_flag(env, "EVENTS_SYNC"),

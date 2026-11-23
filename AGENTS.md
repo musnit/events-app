@@ -1,7 +1,7 @@
 # events — agent context
 
-One calendar of every upcoming event across the Luma calendars musnit follows, musnit's Partiful events
-and AGI House. Luma's public API only covers calendars you *manage*, and Partiful has none, so the
+One calendar of every upcoming event across the Luma calendars musnit follows, musnit's Partiful events,
+AGI House and, for Cape Town, Sundry Mag's weekly list. Luma's public API only covers calendars you *manage*, and Partiful has none, so the
 app reads the same internal endpoints their websites use. Everything upstream is unofficial.
 README.md is the user-facing documentation; this file is for working on the code.
 
@@ -10,10 +10,9 @@ README.md is the user-facing documentation; this file is for working on the code
 - `server.py` — checkout entry point (`python3 server.py`, the same as `python3 -m events`).
 - `events/` — backend, Python 3.11+ **standard library only**.
   - `config.py` `EVENTS_*` settings (table in README.md) · `db.py` SQLite + numbered migrations · `store.py` all SQL
-  - `sources/` one client per upstream (`luma.py`, `partiful.py`, `agihouse.py`) → listing dicts (shape in `sources/__init__.py`)
+  - `sources/` one client per upstream (`luma.py`, `partiful.py`, `agihouse.py`, `sundry.py`) → listing dicts (shape in `sources/__init__.py`)
   - `sync.py` background workers · `catalog.py` merges listings into the event list · `categorize.py` vibes/topics
-  - `areas.py` Bay Area zones / Mumbai classification · `ics.py` iCalendar read/write · `web.py` HTTP/API/static · `legacy.py` v1 import
-  - `research.py` validates and imports persistent editorial research collections, separately from upstream listings
+  - `areas.py` Bay Area zones, Cape Town · `ics.py` iCalendar read/write · `web.py` HTTP/API/static · `legacy.py` v1 import
 - `web/` — frontend: React 19 + TypeScript + Vite, plain CSS, no router or UI libraries.
   - `src/lib/` pure logic (routes, filters, dates, formatting, API client, bookmarklets, PWA)
   - `src/state/` data store (polling), router, toasts · `src/components/` · `src/views/` one file per screen
@@ -39,7 +38,6 @@ EVENTS_SYNC=0 EVENTS_STATE_DIR=data python3 server.py   # serve without backgrou
 npm --prefix web run dev                         # Vite dev server on 127.0.0.1:5173, proxies /api to $EVENTS_API or :8771
 BROWSER_BIN=… BASE_URL=http://127.0.0.1:8771/ npm --prefix web run check:ui   # screenshots in /tmp/events-ui
 python3 -m events.categorize data/events.db [vibes|topics]                    # categorization coverage report
-python3 -m events.research import data/research-imports/collection.json --state-dir data # private editorial data
 ```
 
 After changing `web/package-lock.json`, update `npmDepsHash` in `package.nix`: set it to `lib.fakeHash`,
@@ -50,12 +48,12 @@ font: point `FONTCONFIG_FILE` at a config that adds Noto Color Emoji, or chips s
 
 ## Data model
 
-- **calendar**: what the user sees and can mute (a Luma calendar, "Partiful · my events", "AGI House").
+- **calendar**: what the user sees and can mute (a Luma calendar, "Partiful · my events", "AGI House", "Sundry Mag").
   Kept while any *origin* claims it: `followed` (session sync), `import` (bookmarklet; the import is the
   complete followed set, so re-running it also drops unfollowed calendars), `link`, `config`
   (`EVENTS_LUMA_CALENDARS`), `builtin`. The API refuses to remove `followed` and `config` calendars.
 - **feed**: one unit a worker pulls (`luma:cal-…`, `luma:evt-…`, `luma:following`, `luma:mine`, `luma:ics`,
-  `luma:config`, `partiful:<uid>:mine|following`, `partiful:feed`, `agihouse`). Holds sync health and backoff.
+  `luma:config`, `partiful:<uid>:mine|following`, `partiful:feed`, `agihouse`, `sundry`). Holds sync health and backoff.
 - **linked event**: a single Luma event added by link (`linked_events`), private ones included. Its feed
   `luma:evt-…` lists it under the builtin calendar `luma-links` and refreshes it like a calendar; the catalog
   marks it `linked`, and the web app's area filter leaves it in. It goes when removed or when its listing ages out.
@@ -66,19 +64,14 @@ font: point `FONTCONFIG_FILE` at a config that adds Noto Color Emoji, or chips s
   cross-source duplicates (same title ±3 h), applies RSVPs (`going`), marks (star/hide) and mutes.
 - `event_seen.announced_at` is set only for events that appear after a feed's first pull, which drives
   the "New since your last visit" badge (the client keeps the visit reference in localStorage).
-- **research collection**: durable, validated editorial JSON stored in `research_collections` (migration 3).
-  The CLI atomically upserts by collection ID. Essential/recommended/alternative entries with
-  confirmed/approximate schedules become catalog events; other entries remain collection-only.
-  Optional `local_date` supports date filtering without invented times. Exact canonical URLs attach notes to existing
-  source events without fuzzy-merging talks. Give distinct subsessions distinct URLs. Research/source
-  mark aliases stay consistent. Entries survive sync and pruning; keep real imports in ignored `data/`.
 
 ## Sync
 
 One worker thread per upstream with a de-duplicated priority queue: user refresh > newly added source >
 schedule. Nothing is dropped; asking again only raises priority. Each pull is stored immediately, so the
 UI fills in during a pass and restarts resume from per-feed timestamps. Intervals (each an `EVENTS_*`
-setting): Luma calendars 4 h, 15 s apart; user-triggered pulls 2 s apart; personal feeds, Partiful 1 h; AGI House 2 h.
+setting): Luma calendars 4 h, 15 s apart; user-triggered pulls 2 s apart; personal feeds, Partiful 1 h; AGI House 2 h;
+Sundry Mag 6 h.
 A 429 pauses the Luma worker (45 s → 5 min) and retries; other failures back off per feed (10 min → 4 h)
 and keep the feed's previous listings. A Luma 401 forgets the session and retries without it.
 
@@ -106,6 +99,23 @@ The bookmarklet reads the Firebase refresh token from partiful.com's IndexedDB. 
 live in a private bucket, so covers go through `partiful.imgix.net`. The personal iCal link
 (`webcal://calendars.partiful.com/getCalendar?id=…`) is an alternative with invites/RSVPs only.
 
+## Sundry Mag (sundrymag.substack.com)
+
+- "What to Do In Cape Town This Week" is posted each Monday. `GET /api/v1/archive?sort=new` lists posts and
+  `GET /api/v1/posts/<slug>` returns one with `body_html`, `audience` and `wordcount`.
+- A post is a dated heading per day and a list item per event: the title links to the organiser's own post
+  (mostly Instagram, then Quicket), with nested "⏰ Time", "📍 Location" and "💸 Cost" lines. `parse_post` reads
+  the first clock time of the Time line (South Africa is UTC+2 all year) and the first rand amount of the Cost
+  line; what they cannot hold goes into the listing's `description`, and the location and cost links into `links`.
+- Recent posts have `audience: only_subscribers` (free). Without the `substack.sid` cookie of a subscribed
+  account `body_html` is only the opening, while `wordcount` still counts the whole post; that is how
+  `is_cut_short` tells. The pull stores a cut post the first time, never over a fuller week, and records the
+  cut titles in meta `sundry_locked` for the Cape Town tab and the Sources page.
+- The session is secret `substack_session` (`PUT|DELETE /api/sundry/session`); the API checks that it unlocks
+  the newest post before saving it.
+- Each pull reads the two newest weekly posts. A listing's id is a hash of its link and its date, so a weekly
+  series that reuses one Instagram post is a new event each week.
+
 ## Categories
 
 `categorize.py` scores keyword rules over title (weight 3), tags (2), presenter name + listing calendars (2),
@@ -116,12 +126,12 @@ Room holds ("HOLD – …", "Private Event", "[Hold]") are dropped. Bump `RULES_
 ## Web app
 
 Every screen is a URL (`web/src/lib/routes.ts`): `/`, `/agenda/2026-10-03`, `/day/2026-10-03`,
-`/month/2026-10`, `/event/<id>`, `/saved`, `/calendars`, `/calendars/<id>`, `/sources[/luma|partiful|…]`,
-`/mumbai`, `/research/<id>`. Mumbai's research filters live in `?view=all&date=2026-11-03&kind=talk&priority=essential&q=…`.
-The Mumbai collection and research detail dates always use `Asia/Kolkata`. Its strict area filter
-does not bypass location checks for linked SF events. Uncertain research times have textual labels
-and no calendar export controls.
-Filters live in the query (`?vibe=party,social&topic=ai&time=evening&weekend=1&zone=sf&q=…`). An event opened
+`/month/2026-10`, `/event/<id>`, `/saved`, `/calendars`, `/calendars/<id>`, `/sources[/luma|partiful|…]`, `/cape-town`.
+Filters live in the query (`?vibe=party,social&topic=ai&time=evening&weekend=1&zone=sf&q=…`). The Cape Town
+tab is the agenda with its area fixed (`ViewLocation.area`, read through `useArea`); links that leave it for a day
+or a later date carry `?area=cape-town`, and the shell keeps the tab lit for those. Cape Town is a *destination*
+(`lib/event-time.ts`): its events are bucketed and shown in Cape Town's time whatever the browser's zone, and its
+area filter is strict, so an event added by link elsewhere does not leak in. An event opened
 from a list is drawn over it (history state `background`); opened directly it is a page. The server returns
 index.html for extensionless paths and rewrites `<base href>` from `X-Forwarded-Prefix`, so the app also
 works under a path prefix. It is an installable PWA; `public/sw.js` never caches anything (portal sign-in
@@ -131,10 +141,11 @@ and private data), it only shows an offline page.
 
 `GET /api/events` (catalog; ETag/304, gzip) · `GET /api/status` (sources, workers, feeds, prefs) ·
 `POST /api/sync {source?}` · `PUT /api/prefs {muted_calendars?, area?}` · `PUT /api/events/<id>/mark {starred?, hidden?}` ·
-`GET /api/events/<id>/ics` · `GET /api/research/<id>/ics` (confirmed editorial schedule) · `GET /feed.ics?scope=mine|all` ·
+`GET /api/events/<id>/ics` · `GET /feed.ics?scope=mine|all` ·
 `POST /api/luma/import {payload}` · `POST /api/luma/links {text}` (calendars and events) · `DELETE /api/luma/calendars/<id>` ·
 `DELETE /api/luma/events/<id>` ·
 `PUT|DELETE /api/luma/session` · `PUT|DELETE /api/luma/ics` · `POST /api/partiful/import {payload}` ·
+`PUT|DELETE /api/sundry/session {session}` ·
 `DELETE /api/partiful/accounts/<uid>` · `PUT|DELETE /api/partiful/feed` · `GET /api/health`.
 Writes must be same-origin JSON (Sec-Fetch-Site/Origin checked); the portal in front handles sign-in.
 
@@ -162,7 +173,9 @@ Writes must be same-origin JSON (Sec-Fetch-Site/Origin checked); the portal in f
 
 ## Gotchas
 
-- `events.db` holds the Luma session, Partiful refresh tokens and private feed URLs. Never commit `data/`.
+- `events.db` holds the Luma session, the Substack session, Partiful refresh tokens and private feed URLs. Never commit `data/`.
+- Migration 3 creates a `research_collections` table and migration 4 drops it. Both stay: a deployed database has run 3.
+  The feature (a Mumbai trip's research notes) is in history at `10fe1f8`.
 - This repository is public. Tests and fixtures use made-up ids, names, venues, images and links (`evt-Fixture…`,
   `cal-FixtureBrainBay`), never data captured from the owner's accounts or a private event's link: a fixture
   recorded with a session shows which events the owner registered for.

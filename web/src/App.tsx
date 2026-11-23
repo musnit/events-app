@@ -3,7 +3,7 @@ import { Shell } from "./components/Shell.tsx";
 import { api } from "./lib/api.ts";
 import { readImportHash } from "./lib/bookmarklets.ts";
 import { monthKey } from "./lib/dates.ts";
-import { filtersFromParams } from "./lib/filters.ts";
+import { filtersFromParams, type Filters } from "./lib/filters.ts";
 import { pluralize } from "./lib/format.ts";
 import type { PwaController } from "./lib/pwa.ts";
 import { href, parseRoute, type Route } from "./lib/routes.ts";
@@ -15,7 +15,6 @@ import { AgendaView } from "./views/AgendaView.tsx";
 import { CalendarsView, CalendarView } from "./views/CalendarsView.tsx";
 import { DayView } from "./views/DayView.tsx";
 import { EventPage, EventSheet } from "./views/EventView.tsx";
-import { MumbaiView, ResearchPage } from "./views/MumbaiView.tsx";
 import { MonthView } from "./views/MonthView.tsx";
 import { NotFoundView } from "./views/NotFoundView.tsx";
 import { SavedView } from "./views/SavedView.tsx";
@@ -27,14 +26,18 @@ function View({ route, pwa }: { route: Route; pwa: PwaController }) {
     case "day": return <DayView date={route.date} />;
     case "month": return <MonthView month={route.month || monthKey(new Date())} />;
     case "event": return <EventPage id={route.id} />;
-    case "mumbai": return <MumbaiView />;
-    case "research": return <ResearchPage id={route.id} />;
+    case "cape-town": return <AgendaView from={null} />;
     case "saved": return <SavedView />;
     case "calendars": return <CalendarsView />;
     case "calendar": return <CalendarView id={route.id} />;
     case "sources": return <SourcesView section={route.section} pwa={pwa} />;
     case "notFound": return <NotFoundView />;
   }
+}
+
+/** The Cape Town tab belongs to Cape Town whatever area is saved as the default. */
+function viewOf(route: Route, filters: Filters): ViewLocation {
+  return route.name === "cape-town" ? { route, filters: { ...filters, area: null }, area: "cape-town" } : { route, filters };
 }
 
 /** Bookmarklets come back to the app with their payload in the URL fragment. */
@@ -74,7 +77,7 @@ export function App({ pwa }: { pwa: PwaController }) {
       const target = event.target as HTMLElement | null;
       const typing = target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
       if (event.key !== "/" || typing || event.metaKey || event.ctrlKey || event.altKey) return;
-      const search = document.querySelector<HTMLInputElement>(".page-header .search input, .research-search input");
+      const search = document.querySelector<HTMLInputElement>(".page-header .search input");
       if (search) {
         event.preventDefault();
         search.focus();
@@ -88,10 +91,11 @@ export function App({ pwa }: { pwa: PwaController }) {
   const background = useMemo<ViewLocation | null>(() => {
     if (location_.route.name !== "event" || location_.background === null) return null;
     const url = new URL(location_.background, document.baseURI);
-    return { route: parseRoute(relativePath(url.pathname)), filters: filtersFromParams(url.searchParams) };
+    return viewOf(parseRoute(relativePath(url.pathname)), filtersFromParams(url.searchParams));
   }, [location_.route, location_.background]);
 
-  const main: ViewLocation = background ?? { route: location_.route, filters: location_.filters };
+  const main: ViewLocation = useMemo(() => background ?? viewOf(location_.route, location_.filters),
+    [background, location_.route, location_.filters]);
 
   useEffect(() => {
     // Keep keyboard and screen-reader users oriented after a page change.

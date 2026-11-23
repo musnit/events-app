@@ -12,6 +12,8 @@ import { data, useData } from "../state/data.ts";
 import { useNow } from "../state/hooks.ts";
 import { toast } from "../state/toasts.ts";
 
+const WORKER_LABEL: Record<string, string> = { luma: "Luma", partiful: "Partiful", agihouse: "AGI House", sundry: "Sundry Mag" };
+
 type Platform = "ios" | "android" | "desktop";
 
 function detectPlatform(): Platform {
@@ -194,11 +196,12 @@ export function SourcesView({ section, pwa }: { section: SourcesSection | null; 
   const luma = status?.luma;
   const linkCalendars = (catalog?.calendars ?? []).filter((c) => c.origins.includes("link"));
   const linkedEvents = luma?.linked_events ?? [];
+  const sundryCalendar = catalog?.calendarsById.get("sundry");
 
   return (
     <Page title="Sources" eyebrow="Where your events come from">
       <nav className="section-nav" aria-label="Sections">
-        {([["sync", "Sync"], ["luma", "Luma"], ["partiful", "Partiful"], ["export", "Export"], ["app", "App"]] as [SourcesSection, string][]).map(([id, label]) => (
+        {([["sync", "Sync"], ["luma", "Luma"], ["partiful", "Partiful"], ["sundry", "Cape Town"], ["export", "Export"], ["app", "App"]] as [SourcesSection, string][]).map(([id, label]) => (
           <Link key={id} to={href({ name: "sources", section: id })} options={{ replace: true, keepScroll: true }}
             className={`chip${section === id ? " on" : ""}`}>{label}</Link>
         ))}
@@ -211,7 +214,7 @@ export function SourcesView({ section, pwa }: { section: SourcesSection | null; 
             {Object.values(status.workers).map((w) => (
               <li key={w.name}>
                 <div>
-                  <span className="strong">{w.name === "agihouse" ? "AGI House" : w.name === "luma" ? "Luma" : "Partiful"}</span>
+                  <span className="strong">{WORKER_LABEL[w.name] ?? w.name}</span>
                   <span className="muted"> · {workerLine(w, now, lastSynced(status, w.name))}</span>
                   {w.current && <div className="muted small truncate">Now: {w.current}</div>}
                 </div>
@@ -228,7 +231,7 @@ export function SourcesView({ section, pwa }: { section: SourcesSection | null; 
           </button>
         </div>
         <p className="muted small">
-          Luma calendars refresh every 4 hours, 15 seconds apart, because Luma blocks bursts. Your own RSVPs and Partiful refresh hourly, AGI House every 2 hours.
+          Luma calendars refresh every 4 hours, 15 seconds apart, because Luma blocks bursts. Your own RSVPs and Partiful refresh hourly, AGI House every 2 hours, Sundry Mag every 6.
           Anything you add syncs right away, and events appear as each calendar finishes.
         </p>
         {failing.length > 0 && (
@@ -371,6 +374,45 @@ export function SourcesView({ section, pwa }: { section: SourcesSection | null; 
         </details>
         <p className="muted small">AGI House events are included automatically from its public calendar.</p>
       </Section>
+
+      {status?.sundry.enabled && (
+        <Section id="sundry" title="Cape Town" intro={
+          <p>
+            <a href="https://sundrymag.substack.com/" target="_blank" rel="noopener noreferrer">Sundry Mag</a> posts a list of things to do
+            in Cape Town every Monday. The app reads it into the <Link to={href({ name: "cape-town" })}>Cape Town</Link> tab.
+          </p>
+        }>
+          <p className="status-line">
+            <Icon name={status.sundry.locked.length ? "alert" : "check"} size={16} />
+            {pluralize(sundryCalendar?.upcoming_count ?? 0, "upcoming event")}
+            {status.sundry.session ? " · reading as a subscriber" : ""}
+          </p>
+          {status.sundry.locked.length > 0 && (
+            <p className="callout">
+              This week's post is for subscribers, and Substack sent only its opening{status.sundry.session ? " even with the saved session" : ""}.
+              Subscribing is free.
+            </p>
+          )}
+          {status.sundry.session ? (
+            <div className="row-wrap">
+              <span className="status-line"><Icon name="check" size={16} /> Substack session saved</span>
+              <button type="button" className="button small subtle" onClick={() => void run(api.sundryClearSession, "Removed the Substack session")}>Remove</button>
+            </div>
+          ) : (
+            <details className="more" open={status.sundry.locked.length > 0}>
+              <summary>Read subscriber posts with your Substack session</summary>
+              <ol className="steps">
+                <li>On a computer, open <a href="https://sundrymag.substack.com/" target="_blank" rel="noopener noreferrer">sundrymag.substack.com</a> signed in to an account that subscribes to it.</li>
+                <li>Open the browser's developer tools → <b>Application</b> (Chrome) or <b>Storage</b> (Firefox, Safari) → <b>Cookies</b>.</li>
+                <li>Copy the value of <code>substack.sid</code> and paste it here.</li>
+              </ol>
+              <ValueForm label="substack.sid cookie" placeholder="s%3A…" type="password" submit={async (value) =>
+                `Saved. ${pluralize((await api.sundrySetSession(value)).events, "event")} in the latest posts.`} onDone={changed} />
+              <p className="muted small">The cookie is kept on the server only and is never shown again. It signs in to your whole Substack account, so remove it here if you stop using this.</p>
+            </details>
+          )}
+        </Section>
+      )}
 
       <Section id="export" title="Export">
         <div className="row-wrap">

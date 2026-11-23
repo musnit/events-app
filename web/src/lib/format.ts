@@ -1,5 +1,5 @@
 import { addDays, dayKey, daysBetween, parseDayKey, startOfDay } from "./dates.ts";
-import { eventDayOf, eventTimeZone, type EventClock } from "./event-time.ts";
+import { eventDayOf, eventDestination, type EventClock } from "./event-time.ts";
 import type { EventItem, Source, Ticket } from "./types.ts";
 
 const timeWithMinutes = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
@@ -20,12 +20,15 @@ export function fmtTime(iso: string, timeZone?: string): string {
 
 export function fmtTimeRange(ev: Pick<EventItem, "start_at" | "end_at" | "all_day"> & EventClock): string {
   if (ev.all_day) return "All day";
-  const timeZone = eventTimeZone(ev);
-  if (timeZone) {
+  const zone = eventDestination(ev);
+  if (zone) {
+    // Destination times are the destination's; say so unless the reader's own clock agrees.
+    const { timeZone } = zone;
+    const suffix = timeZone === LOCAL_TZ ? "" : ` ${zone.abbreviation}`;
     const start = fmtTime(ev.start_at, timeZone);
-    if (!ev.end_at) return `${start} IST`;
+    if (!ev.end_at) return `${start}${suffix}`;
     const date = eventDayOf(ev) === eventDayOf(ev, ev.end_at) ? "" : `${new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone }).format(new Date(ev.end_at))}, `;
-    return `${start} – ${date}${fmtTime(ev.end_at, timeZone)} IST`;
+    return `${start} – ${date}${fmtTime(ev.end_at, timeZone)}${suffix}`;
   }
   const start = fmtTime(ev.start_at);
   if (!ev.end_at) return start;
@@ -62,7 +65,7 @@ export function relativeDay(key: string, today = new Date()): string {
 
 /** When an event happens in another time zone, its local wall-clock time, e.g. "7:00 PM EDT". */
 export function eventZoneNote(ev: Pick<EventItem, "start_at" | "timezone" | "all_day"> & EventClock): string | null {
-  if (eventTimeZone(ev) || ev.all_day || !ev.timezone || ev.timezone === LOCAL_TZ) return null;
+  if (eventDestination(ev) || ev.all_day || !ev.timezone || ev.timezone === LOCAL_TZ) return null;
   try {
     const d = new Date(ev.start_at);
     const theirs = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZone: ev.timezone, timeZoneName: "short" }).format(d);
@@ -79,13 +82,30 @@ export function fmtPrice(ticket: Ticket | null): string | null {
   if (ticket.sold_out) return ticket.waitlist ? "Waitlist" : "Sold out";
   if (ticket.free) return "Free";
   if (ticket.price_cents == null) return null;
-  const money = (cents: number) =>
-    new Intl.NumberFormat(undefined, { style: "currency", currency: (ticket.currency || "usd").toUpperCase(), maximumFractionDigits: cents % 100 ? 2 : 0 }).format(cents / 100);
+  const currency = (ticket.currency || "usd").toUpperCase();
+  const money = (cents: number) => currency === "ZAR"
+    // South Africans write R80, which no locale's currency style produces outside South Africa.
+    ? `R${(cents / 100).toLocaleString(undefined, { maximumFractionDigits: cents % 100 ? 2 : 0 })}`
+    : new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: cents % 100 ? 2 : 0 }).format(cents / 100);
   if (ticket.max_price_cents && ticket.max_price_cents > ticket.price_cents) return `${money(ticket.price_cents)}–${money(ticket.max_price_cents)}`;
   return money(ticket.price_cents);
 }
 
-export const SOURCE_LABEL: Record<Source, string> = { luma: "Luma", partiful: "Partiful", agihouse: "AGI House", research: "Research" };
+export const SOURCE_LABEL: Record<Source, string> = { luma: "Luma", partiful: "Partiful", agihouse: "AGI House", sundry: "Sundry Mag" };
+
+/** The main button on an event. A weekly list links wherever the organiser posted, so the site names the button. */
+export function eventLinkLabel(ev: Pick<EventItem, "source" | "url" | "going">): string {
+  if (ev.source !== "sundry") return `${ev.going ? "Open" : "RSVP"} on ${SOURCE_LABEL[ev.source]}`;
+  let host = "";
+  try {
+    host = new URL(ev.url).hostname.replace(/^www\./, "");
+  } catch {
+    // Not a URL; the generic label below still fits.
+  }
+  const site = ({ "instagram.com": "Instagram", "quicket.co.za": "Quicket", "luma.com": "Luma", "lu.ma": "Luma", "meetup.com": "Meetup",
+    "facebook.com": "Facebook", "fixr.co": "Fixr", "sundrymag.substack.com": "Sundry Mag" } as Record<string, string>)[host];
+  return site ? `See it on ${site}` : "Open the event page";
+}
 
 export function goingLabel(status: string | null): string {
   switch (status) {

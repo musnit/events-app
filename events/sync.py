@@ -25,12 +25,15 @@ from .config import Settings
 from .sources import agihouse as agihouse_src
 from .sources import luma as luma_src
 from .sources import partiful as partiful_src
+from .sources import sundry as sundry_src
 from .store import Feed, Store
+from .timeutil import to_iso
 
 log = logging.getLogger(__name__)
 
 USER, NEW, SCHEDULED = 0, 1, 2
 CONFIG_FEED = "luma:config"
+SUNDRY_FEED = "sundry"
 CONFIG_NEVER_STALE = 10 * 365 * 86400
 RATE_LIMIT_PAUSES = (45, 90, 180, 300)
 IDLE_CHECK_S = 60
@@ -216,12 +219,13 @@ class Sync:
 
     def __init__(self, store: Store, settings: Settings, *, luma: luma_src.LumaClient | None = None,
                  partiful: partiful_src.PartifulClient | None = None, agihouse: agihouse_src.AgiHouseClient | None = None,
-                 clock: Callable[[], float] = time.time):
+                 sundry: sundry_src.SundryClient | None = None, clock: Callable[[], float] = time.time):
         self.store = store
         self.settings = settings
         self.luma = luma or luma_src.LumaClient()
         self.partiful = partiful or partiful_src.PartifulClient()
         self.agihouse = agihouse or agihouse_src.AgiHouseClient()
+        self.sundry = sundry or sundry_src.SundryClient()
         self.clock = clock
         self._reconcile_lock = threading.Lock()
         intervals = {
@@ -229,13 +233,14 @@ class Sync:
             "luma-mine": settings.personal_interval, "luma-ics": settings.personal_interval,
             "partiful-mine": settings.partiful_interval, "partiful-following": settings.partiful_interval,
             "partiful-feed": settings.partiful_interval, "agihouse": settings.agihouse_interval,
+            "sundry": settings.sundry_interval,
             # Resolved once; start() makes it due again whenever the configured list changes.
             "luma-config": CONFIG_NEVER_STALE,
             "luma-event": settings.luma_interval,
         }
         self.intervals = intervals
         self.workers: dict[str, Worker] = {}
-        for source, spacing in (("luma", settings.luma_spacing), ("partiful", 1.0), ("agihouse", 1.0)):
+        for source, spacing in (("luma", settings.luma_spacing), ("partiful", 1.0), ("agihouse", 1.0), ("sundry", 1.0)):
             self.workers[source] = Worker(source, run=self._run, due=self._due_for(source), feed=store.feed,
                                           on_failure=self._record_failure, spacing=spacing,
                                           fast_spacing=min(spacing, settings.manual_spacing), clock=clock)
@@ -327,6 +332,12 @@ class Sync:
                                       "label": "AGI House"}
             else:
                 store.remove_calendar(agihouse_src.CALENDAR["id"], "builtin")
+            if self.settings.sundry:
+                store.upsert_calendar(sundry_src.CALENDAR, "builtin")
+                wanted[SUNDRY_FEED] = {"source": "sundry", "kind": "sundry", "calendar_id": sundry_src.CALENDAR["id"],
+                                       "label": "Sundry Mag · Cape Town"}
+            else:
+                store.remove_calendar(sundry_src.CALENDAR["id"], "builtin")
             linked = store.linked_events()
             if linked:
                 store.upsert_calendar(luma_src.LINKED_CALENDAR, "builtin")
@@ -417,6 +428,7 @@ class Sync:
             "luma-mine": self._pull_luma_mine, "luma-ics": self._pull_luma_ics,
             "partiful-mine": self._pull_partiful, "partiful-following": self._pull_partiful,
             "partiful-feed": self._pull_partiful_feed, "agihouse": self._pull_agihouse,
+            "sundry": self._pull_sundry,
         }.get(feed.kind)
         if handler is None:
             raise ValueError(f"unknown feed kind {feed.kind}")
@@ -559,3 +571,16 @@ class Sync:
 
     def _pull_agihouse(self, feed: Feed) -> None:
         self.store.replace_listings(feed.key, self.agihouse.events())
+
+    def _pull_sundry(self, feed: Feed) -> None:
+        """A subscriber post read without a working session comes back as its opening only. That is
+        still stored the first time, but it never replaces a fuller week already indexed."""
+        session = self.store.get_secret("substack_session")
+        pull = self.sundry.events((session or {}).get("sid"))
+        now = to_iso(self.store.clock())
+        upcoming = sum(1 for ev in pull.events if ev["start_at"] >= now)
+        self.store.set_meta("sundry_locked", json.dumps(pull.locked))
+        if pull.locked and upcoming < self.store.upcoming_count(feed.key):
+            raise ValueError("Substack sent only the opening of “" + pull.locked[0] + "”, which is for subscribers; "
+                             "keeping the events already indexed")
+        self.store.replace_listings(feed.key, pull.events)

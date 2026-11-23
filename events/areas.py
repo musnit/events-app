@@ -1,4 +1,4 @@
-"""Classify explicit locations into the Bay Area, Mumbai, online, elsewhere, or unknown."""
+"""An event is in the Bay Area (and a part of it), in Cape Town, online, elsewhere, or somewhere unknown."""
 from __future__ import annotations
 
 import math
@@ -58,8 +58,9 @@ ALIASES = {"sf": "san francisco", "s.f.": "san francisco", "san francisco county
 ZONE_WORDS = {"east bay": "east-bay", "south bay": "south-bay", "peninsula": "peninsula", "north bay": "north-bay",
               "marin": "north-bay"}
 BAY_BOX = (36.85, 38.70, -123.15, -121.20)  # lat min, lat max, lng min, lng max
-MUMBAI_BOX = (18.85, 19.35, 72.75, 73.05)
-MUMBAI_RE = re.compile(r"\b(?:navi\s+)?(?:mumbai|bombay)\b", re.I)
+# Cape Town with the Peninsula and the Winelands towns people drive out to for a day.
+CAPE_BOX = (-34.45, -33.35, 18.25, 19.25)
+CAPE_RE = re.compile(r"\b(?:cape\s+town|kaapstad)\b", re.I)
 NEAREST_KM = 25
 ONLINE_WORDS = re.compile(r"\b(zoom|google meet|online|virtual|livestream|webinar|discord|twitch|youtube live)\b", re.I)
 CITY_RE = re.compile(r"\b(" + "|".join(sorted((re.escape(c) for c in CITIES), key=len, reverse=True)) + r")\b", re.I)
@@ -97,14 +98,15 @@ def _city_zone(city: str | None) -> str | None:
 
 
 def classify(ev: dict) -> tuple[str, str | None]:
-    """Return (area, zone); Mumbai requires location evidence, never a timezone or title alone."""
+    """Return (area, zone). area is bay | cape-town | online | elsewhere | unknown; zone is a ZONES key or None.
+    Cape Town needs location evidence: coordinates, or the city or address naming it."""
     loc = ev.get("location") or {}
     if loc.get("type") == "online":
         return "online", None
     lat, lng = loc.get("lat"), loc.get("lng")
     if isinstance(lat, (int, float)) and isinstance(lng, (int, float)):
-        if MUMBAI_BOX[0] <= lat <= MUMBAI_BOX[1] and MUMBAI_BOX[2] <= lng <= MUMBAI_BOX[3]:
-            return "mumbai", None
+        if CAPE_BOX[0] <= lat <= CAPE_BOX[1] and CAPE_BOX[2] <= lng <= CAPE_BOX[3]:
+            return "cape-town", None
         if not (BAY_BOX[0] <= lat <= BAY_BOX[1] and BAY_BOX[2] <= lng <= BAY_BOX[3]):
             return "elsewhere", None
         zone = _city_zone(loc.get("city"))
@@ -116,11 +118,11 @@ def classify(ev: dict) -> tuple[str, str | None]:
     region = str(loc.get("region") or "").strip().lower()
     address = str(loc.get("address") or "")
     city = str(loc.get("city") or "")
-    # A Bombay-named restaurant in SF remains in SF; only actual city/address fields
-    # and compatible country/region evidence can identify Mumbai without coordinates.
-    if (country in {"", "IN", "IND", "INDIA"} and region in {"", "mh", "maharashtra"}
-            and (MUMBAI_RE.fullmatch(city.strip()) or (not _city_zone(city) and MUMBAI_RE.search(address)))):
-        return "mumbai", None
+    # A venue in SF named after Cape Town stays in SF: only the city or address fields count, and
+    # only when the country and region do not say otherwise.
+    if (country in {"", "ZA", "ZAF", "SOUTH AFRICA"} and region in {"", "wc", "western cape"}
+            and (CAPE_RE.fullmatch(city.strip()) or (not _city_zone(city) and CAPE_RE.search(address)))):
+        return "cape-town", None
     if country and country not in ("US", "USA", "UNITED STATES"):
         return "elsewhere", None
     if region and region not in ("ca", "california"):

@@ -5,7 +5,6 @@ import { createPwaController } from "./lib/pwa.ts";
 import "./styles/base.css";
 import "./styles/layout.css";
 import "./styles/components.css";
-import "./styles/research.css";
 
 // Registered only in the built app: the worker gives an offline page, never cached data.
 const pwa = createPwaController(window, { registerServiceWorker: import.meta.env.PROD });

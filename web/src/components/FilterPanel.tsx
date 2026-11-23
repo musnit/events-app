@@ -4,6 +4,7 @@ import { href, type Route } from "../lib/routes.ts";
 import type { AreaChoice } from "../lib/types.ts";
 import { data, useData } from "../state/data.ts";
 import { useArea } from "../state/hooks.ts";
+import { useViewArea } from "../state/view.ts";
 import { navigate } from "../state/router.ts";
 
 export function applyFilters(route: Route, filters: Filters): void {
@@ -55,6 +56,8 @@ export function VibeStrip({ route, filters, counts }: { route: Route; filters: F
 export function FilterPanel({ route, filters, counts, showVibes = true }: { route: Route; filters: Filters; counts: FacetCounts; showVibes?: boolean }) {
   const { catalog } = useData();
   const preferred = useArea();
+  // A view that belongs to one area (the Cape Town tab) has no area to choose.
+  const pinned = useViewArea();
   const set = (patch: Partial<Filters>) => applyFilters(route, { ...filters, ...patch });
   if (!catalog) return null;
   const area = filters.area ?? preferred;
@@ -89,18 +92,18 @@ export function FilterPanel({ route, filters, counts, showVibes = true }: { rout
             onClick={() => set({ topics: toggle(filters.topics, t.id) })}>{t.emoji} {t.label}</Chip>
         ))}
       </Group>
-      <Group title="Where">
+      {!pinned && <Group title="Where">
         <div className="segmented" role="radiogroup" aria-label="Area">
           {AREA_CHOICES.map((a) => (
             <button key={a.id} type="button" role="radio" aria-checked={area === a.id} className={area === a.id ? "on" : ""}
               onClick={() => chooseArea(a.id)}>{a.label}</button>
           ))}
         </div>
-        {area !== "all" && area !== "mumbai" && catalog.zones.map((z) => (
+        {area !== "all" && area !== "cape-town" && catalog.zones.map((z) => (
           <Chip key={z.id} on={filters.zones.includes(z.id)} count={counts.zones[z.id] ?? 0}
             onClick={() => set({ zones: toggle(filters.zones, z.id) })}>{z.label}</Chip>
         ))}
-      </Group>
+      </Group>}
       <Group title="Crowd">
         {catalog.sizes.map((s) => (
           <Chip key={s.id} on={filters.sizes.includes(s.id)} count={counts.sizes[s.id] ?? 0} title={s.hint}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { dayKey, parseDayKey, type DayKey } from "../lib/dates.ts";
-import { areaToday, eventDayOf } from "../lib/event-time.ts";
+import { areaToday, eventDayOf, sharedDestination } from "../lib/event-time.ts";
 import { groupByDay } from "../lib/event-groups.ts";
 import { fmtDayShort, relativeDay } from "../lib/format.ts";
 import { href } from "../lib/routes.ts";
@@ -40,13 +40,15 @@ export function EventList({ events, resetKey, empty, dayLinks = true, ongoingBef
       {groups.map((group) => {
         const ongoing = group.key === "ongoing";
         const date = parseDayKey(group.key);
-        const groupToday = group.events.every((ev) => ev.area === "mumbai") ? areaToday("mumbai") : todayDate;
+        // A day of Cape Town events is Cape Town's day, and its link stays there.
+        const destination = sharedDestination(group.events);
+        const groupToday = destination ? areaToday(destination) : todayDate;
         const label = ongoing ? "Ongoing" : relativeDay(group.key, groupToday);
         const full = ongoing ? label : date ? fmtDayShort(date) : group.key;
         return (
           <section key={group.key} className="day-group" aria-label={label === full ? full : `${label}, ${full}`}>
             <h2 className={`day-heading${group.key === dayKey(groupToday) ? " today" : ""}`}>
-              {dayLinks && !ongoing ? <Link to={href({ name: "day", date: group.key }, { ...filters, ...(group.events.every((ev) => ev.area === "mumbai") ? { area: "mumbai" } : {}) })}>{label}</Link> : <span>{label}</span>}
+              {dayLinks && !ongoing ? <Link to={href({ name: "day", date: group.key }, { ...filters, ...(destination ? { area: destination } : {}) })}>{label}</Link> : <span>{label}</span>}
               {label !== full && <span className="day-date">{full}</span>}
               <span className="day-count">{group.events.length}</span>
             </h2>

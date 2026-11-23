@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { dayKey, monthGrid } from "../lib/dates.ts";
-import { eventDayOf, eventHasExactTime, eventTimeZone } from "../lib/event-time.ts";
+import { eventDayOf, eventDestination } from "../lib/event-time.ts";
 import { fmtTime } from "../lib/format.ts";
 import { href } from "../lib/routes.ts";
 import type { EventItem } from "../lib/types.ts";
@@ -50,7 +50,7 @@ export function MonthGrid({ month, events, filtersQuery, today = dayKey(new Date
                   {list.slice(0, PER_DAY).map((ev) => (
                     <li key={ev.id} data-vibe={ev.vibes[0] || "none"} className={ev.going ? "going" : ev.starred ? "starred" : ""}>
                       <Link to={href({ name: "event", id: ev.id })} options={{ background: currentRelativeUrl() }} title={ev.name}>
-                        <span className="time">{!eventHasExactTime(ev) ? "Time TBC" : ev.all_day ? "" : fmtTime(ev.start_at, eventTimeZone(ev))}</span> {ev.name}
+                        <span className="time">{ev.all_day ? "" : fmtTime(ev.start_at, eventDestination(ev)?.timeZone)}</span> {ev.name}
                       </Link>
                     </li>
                   ))}
