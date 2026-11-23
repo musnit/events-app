@@ -28,6 +28,10 @@ FEED_RICHNESS = {"calendar": 6, "luma-event": 6, "luma-mine": 5, "partiful-mine"
 SOURCE_RANK = {"luma": 0, "partiful": 1, "agihouse": 2, "sundry": 3, "instagram": 4}
 # A weekly list and the organiser's account both point at the same post; a day apart they are still one event.
 SAME_LINK_WINDOW_S = 20 * 3600
+# The same organiser, a day apart at most, under titles that share most words or where one is the other with
+# more said ("Dinner with Strangers" and "Dinner with Strangers (Final of the Year)").
+SAME_ORGANISER_WINDOW_S = 24 * 3600
+SAME_ORGANISER_SIMILARITY = 0.4
 DUPLICATE_WINDOW_S = 3 * 3600
 DUPLICATE_SIMILARITY = 0.6
 
@@ -46,6 +50,13 @@ def title_words(name: str | None) -> set[str]:
 
 def _similar(a: set[str], b: set[str]) -> bool:
     return bool(a and b) and len(a & b) / len(a | b) >= DUPLICATE_SIMILARITY
+
+
+def _same_under_one_organiser(a: set[str], b: set[str]) -> bool:
+    if not a or not b:
+        return False
+    contained = min(len(a), len(b)) >= 2 and (a <= b or b <= a)
+    return contained or len(a & b) / len(a | b) >= SAME_ORGANISER_SIMILARITY
 
 
 def _epoch(iso: str | None) -> float | None:
@@ -137,7 +148,9 @@ class Catalog:
         kept: list[dict] = []
         by_hour: dict[int, list[tuple[dict, set[str]]]] = {}
         by_link: dict[str, list[dict]] = {}
+        by_organiser: dict[str, list[tuple[dict, set[str]]]] = {}
         for ev in ordered:
+            organiser = (ev.get("presenter") or {}).get("id")
             start = _epoch(ev["start_at"])
             words = title_words(ev.get("name"))
             match = None
@@ -146,6 +159,13 @@ class Catalog:
                     other_start = _epoch(other["start_at"])
                     if (other["source"] != ev["source"] and other_start is not None
                             and abs(other_start - start) <= SAME_LINK_WINDOW_S):
+                        match = other
+                        break
+            if match is None and start is not None and organiser:
+                for other, other_words in by_organiser.get(organiser, []):
+                    other_start = _epoch(other["start_at"])
+                    if (other["source"] != ev["source"] and other_start is not None
+                            and abs(other_start - start) <= SAME_ORGANISER_WINDOW_S and _same_under_one_organiser(words, other_words)):
                         match = other
                         break
             if match is None and start is not None and words:
@@ -171,6 +191,8 @@ class Catalog:
                 by_hour.setdefault(int(start // 3600), []).append((ev, words))
                 if ev.get("url"):
                     by_link.setdefault(ev["url"], []).append(ev)
+                if organiser:
+                    by_organiser.setdefault(organiser, []).append((ev, words))
         return kept
 
     # ---------- cached, serialized snapshot ----------
