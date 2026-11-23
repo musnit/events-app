@@ -306,6 +306,30 @@ class SyncTest(unittest.TestCase):
         self.sync._run(self.store.feed("sundry"), 0)
         self.assertIsNone(self.store.calendar("instagram:fixture_basement"))
 
+    def test_one_organiser_announcing_what_sundry_listed_is_one_event(self):
+        organiser = {"id": "instagram:fixture_basement", "name": "Fixture Basement", "avatar_url": None, "url": None, "description": None}
+        for key, source in (("sundry", "sundry"), ("instagram:fixture_basement", "instagram")):
+            self.store.upsert_calendar({"id": key, "source": source, "name": key, "slug": None, "avatar_url": None, "tint_color": None,
+                                        "url": None, "description": None}, "builtin")
+            self.store.ensure_feed(key, source=source, kind=source, calendar_id=key, label=key)
+        both = lambda name, hours, **kw: listing(f"id-{name}-{hours}", name=name, start=iso(hours), presenter=organiser, **kw)  # noqa: E731
+        self.store.replace_listings("sundry", [
+            both("Dinner with Strangers", 30, source="sundry", url="https://www.instagram.com/p/FixtureA/"),
+            both("Fixture Store Opening", 50, source="sundry", url="https://www.instagram.com/p/FixtureB/"),
+            both("Art Night: Moonlit Skies", 80, source="sundry", url="https://www.instagram.com/p/FixtureC/"),
+            both("Market", 120, source="sundry", url="https://www.instagram.com/p/FixtureD/")])
+        self.store.replace_listings("instagram:fixture_basement", [
+            both("Dinner with Strangers (Final of the Year)", 30, source="instagram", url="https://www.instagram.com/p/FixtureE/"),
+            both("RAILS by Fixture Opening Day Store", 62, source="instagram", url="https://www.instagram.com/p/FixtureF/"),
+            both("Co-Flow", 80, source="instagram", url="https://www.instagram.com/p/FixtureG/"),
+            both("Market Day Out", 120, source="instagram", url="https://www.instagram.com/p/FixtureH/"),
+            both("Dinner with Strangers", 30 + 24 * 7, source="instagram", url="https://www.instagram.com/p/FixtureI/")])
+        names = sorted((e["name"], e["source"], len(e["calendar_ids"])) for e in Catalog(self.store, self.clock).build()["events"])
+        self.assertEqual(names, [("Art Night: Moonlit Skies", "sundry", 1), ("Co-Flow", "instagram", 1),
+                                 ("Dinner with Strangers", "instagram", 1), ("Dinner with Strangers", "sundry", 2),
+                                 ("Fixture Store Opening", "sundry", 2), ("Market", "sundry", 1), ("Market Day Out", "instagram", 1)],
+                         "more said about the same night folds; another night, another event or a one-word match does not")
+
     def test_listings_from_a_reading(self):
         account = {"username": "fixture_basement", "name": None, "avatar": None}
         read = post(image="media/" + "a" * 32 + ".jpg", events=[
