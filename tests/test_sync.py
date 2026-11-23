@@ -265,7 +265,7 @@ class ReconcileTest(SyncTestCase):
         self.assertEqual(self.sync.reconcile(), [])
         self.assertEqual(self.sync.workers["luma"]._spacing, 15)
         self.assertEqual(self.sync.workers["luma"]._fast_spacing, 2)
-        self.assertEqual(set(self.sync.status()), {"luma", "partiful", "agihouse", "sundry"})
+        self.assertEqual(set(self.sync.status()), {"luma", "partiful", "agihouse", "sundry", "instagram"})
 
     def test_luma_sources(self):
         self.store.upsert_calendar(calendar(CAL, "Alpha"), "link")

@@ -12,6 +12,7 @@ resumes from each feed's own timestamps. A 429 from Luma pauses the Luma worker 
 """
 from __future__ import annotations
 
+import hashlib
 import itertools
 import json
 import logging
@@ -20,11 +21,14 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
 
 from . import net
 from . import preview as preview_mod
+from . import reader as reader_mod
 from .config import Settings
 from .sources import agihouse as agihouse_src
+from .sources import instagram as instagram_src
 from .sources import luma as luma_src
 from .sources import partiful as partiful_src
 from .sources import sundry as sundry_src
@@ -42,6 +46,11 @@ PREVIEWS_PER_PULL = 150
 PREVIEW_SAVE_EVERY = 8
 # One page that will not load is that page's trouble; this many in a row from one site is the site's.
 PREVIEW_MISSES_IN_A_ROW = 4
+# Instagram: only posts this recent are read, an account stays followed this long after Sundry Mag last
+# featured it, and a post Claude could not be asked about is retried this many pulls.
+INSTAGRAM_POST_DAYS = 45
+INSTAGRAM_FOLLOW_DAYS = 60
+INSTAGRAM_READ_ATTEMPTS = 3
 CONFIG_NEVER_STALE = 10 * 365 * 86400
 RATE_LIMIT_PAUSES = (45, 90, 180, 300)
 IDLE_CHECK_S = 60
@@ -228,6 +237,7 @@ class Sync:
     def __init__(self, store: Store, settings: Settings, *, luma: luma_src.LumaClient | None = None,
                  partiful: partiful_src.PartifulClient | None = None, agihouse: agihouse_src.AgiHouseClient | None = None,
                  sundry: sundry_src.SundryClient | None = None, previews: preview_mod.PreviewClient | None = None,
+                 instagram: instagram_src.InstagramClient | None = None, reader: reader_mod.ClaudeReader | None = None,
                  clock: Callable[[], float] = time.time):
         self.store = store
         self.settings = settings
@@ -236,6 +246,8 @@ class Sync:
         self.agihouse = agihouse or agihouse_src.AgiHouseClient()
         self.sundry = sundry or sundry_src.SundryClient()
         self.previews = previews or preview_mod.PreviewClient(settings.state_dir / MEDIA_DIR)
+        self.instagram = instagram or instagram_src.InstagramClient()
+        self.reader = reader or reader_mod.ClaudeReader(settings.claude, settings.claude_model, settings.state_dir / MEDIA_DIR)
         self.clock = clock
         self._reconcile_lock = threading.Lock()
         intervals = {
@@ -243,17 +255,19 @@ class Sync:
             "luma-mine": settings.personal_interval, "luma-ics": settings.personal_interval,
             "partiful-mine": settings.partiful_interval, "partiful-following": settings.partiful_interval,
             "partiful-feed": settings.partiful_interval, "agihouse": settings.agihouse_interval,
-            "sundry": settings.sundry_interval,
+            "sundry": settings.sundry_interval, "instagram": settings.instagram_interval,
             # Resolved once; start() makes it due again whenever the configured list changes.
             "luma-config": CONFIG_NEVER_STALE,
             "luma-event": settings.luma_interval,
         }
         self.intervals = intervals
         self.workers: dict[str, Worker] = {}
-        for source, spacing in (("luma", settings.luma_spacing), ("partiful", 1.0), ("agihouse", 1.0), ("sundry", 1.0)):
+        for source, spacing in (("luma", settings.luma_spacing), ("partiful", 1.0), ("agihouse", 1.0), ("sundry", 1.0),
+                                ("instagram", settings.instagram_spacing)):
+            # Instagram gets no faster for being asked by hand: a burst over every account is what it refuses.
+            fast = spacing if source == "instagram" else min(spacing, settings.manual_spacing)
             self.workers[source] = Worker(source, run=self._run, due=self._due_for(source), feed=store.feed,
-                                          on_failure=self._record_failure, spacing=spacing,
-                                          fast_spacing=min(spacing, settings.manual_spacing), clock=clock)
+                                          on_failure=self._record_failure, spacing=spacing, fast_spacing=fast, clock=clock)
         self._housekeeping: threading.Thread | None = None
         self._stopping = threading.Event()
 
@@ -288,7 +302,7 @@ class Sync:
                 if removed:
                     log.info("pruned %s old listings", removed)
                     self.reconcile()  # drops the feeds of events added by link that aged out
-                self.previews.prune(self.store.prune_previews(), self.clock() - 86400)
+                self.previews.prune(self.store.prune_previews() | self.store.prune_instagram(), self.clock() - 86400)
             except Exception:
                 log.exception("housekeeping failed")
 
@@ -349,6 +363,11 @@ class Sync:
                                        "label": "Sundry Mag · Cape Town"}
             else:
                 store.remove_calendar(sundry_src.CALENDAR["id"], "builtin")
+            if self.instagram_on:
+                for cal in store.calendars():
+                    if cal["source"] == "instagram":
+                        wanted[cal["id"]] = {"source": "instagram", "kind": "instagram", "calendar_id": cal["id"],
+                                             "label": f"Instagram · {cal['name'] or cal['id']}"}
             linked = store.linked_events()
             if linked:
                 store.upsert_calendar(luma_src.LINKED_CALENDAR, "builtin")
@@ -375,6 +394,11 @@ class Sync:
                 if key not in before:
                     created.append(key)
             return sorted(created)
+
+    @property
+    def instagram_on(self) -> bool:
+        """Accounts are followed only when their posts can be read into events."""
+        return self.settings.instagram and self.reader.available
 
     def link_event(self, listing: dict) -> None:
         """Add an event by link and show it at once; its feed keeps it current from then on."""
@@ -439,7 +463,7 @@ class Sync:
             "luma-mine": self._pull_luma_mine, "luma-ics": self._pull_luma_ics,
             "partiful-mine": self._pull_partiful, "partiful-following": self._pull_partiful,
             "partiful-feed": self._pull_partiful_feed, "agihouse": self._pull_agihouse,
-            "sundry": self._pull_sundry,
+            "sundry": self._pull_sundry, "instagram": self._pull_instagram,
         }.get(feed.kind)
         if handler is None:
             raise ValueError(f"unknown feed kind {feed.kind}")
@@ -596,6 +620,7 @@ class Sync:
                              "keeping the events already indexed")
         self._store_with_previews(feed, pull.events)
         self._read_previews(feed, pull.events, now)
+        self._follow_organisers(pull.events)
 
     def _store_with_previews(self, feed: Feed, events: list[dict]) -> None:
         saved = self.store.previews(ev["url"] for ev in events)
@@ -638,3 +663,104 @@ class Sync:
                 self._store_with_previews(feed, events)
         if fresh:
             self._store_with_previews(feed, events)
+
+    # ---------- Instagram accounts ----------
+
+    def _follow_organisers(self, events: list[dict]) -> None:
+        """Follow the Instagram accounts behind the events Sundry Mag lists, for as long as it keeps featuring
+        them, unless the user removed the account."""
+        if not self.instagram_on:
+            self.store.set_origin_calendars("sundry", [])
+            return
+        now = self.store.clock()
+        try:
+            seen = json.loads(self.store.get_meta("instagram_seen") or "{}")
+            dismissed = set(json.loads(self.store.get_meta("instagram_dismissed") or "[]"))
+        except ValueError:
+            seen, dismissed = {}, set()
+        for found in self.store.previews(ev["url"] for ev in events).values():
+            author = found.get("author") or {}
+            username = str(author.get("id") or "").removeprefix("instagram:")
+            if str(author.get("id") or "").startswith("instagram:") and instagram_src.USERNAME_RE.match(username):
+                seen[username] = {"name": author.get("name"), "at": now}
+        seen = {name: entry for name, entry in seen.items() if now - entry.get("at", 0) <= INSTAGRAM_FOLLOW_DAYS * 86400}
+        self.store.set_meta("instagram_seen", json.dumps(seen))
+        self.store.set_origin_calendars("sundry", [instagram_src.calendar(name, entry.get("name"))
+                                                   for name, entry in sorted(seen.items()) if name not in dismissed])
+        self._enqueue(self.reconcile(), NEW)
+
+    def _pull_instagram(self, feed: Feed) -> None:
+        """Save the account's new posts, have Claude read the ones not read yet, and list the events they announce.
+        Posts fall off Instagram's list of six, so the listing is built from every saved post."""
+        username = feed.key.split(":", 1)[1]
+        page = self.instagram.account(username)
+        now = self.store.clock()
+        avatar = self.previews.keep_image(page["avatar_url"]) if page.get("avatar_url") else None
+        self.store.update_calendar_details({"id": feed.calendar_id, "name": page.get("name"), "avatar_url": avatar})
+        known = {post["code"] for post in self.store.instagram_posts(username)}
+        recent = to_iso(now - INSTAGRAM_POST_DAYS * 86400)
+        for post in page["posts"]:
+            if post["code"] not in known and post["taken_at"] >= recent:
+                image = self.previews.keep_image(post["image_url"]) if post.get("image_url") else None
+                self.store.add_instagram_post(username, post, image)
+        account = {"username": username, "name": page.get("name") or (self.store.calendar(feed.calendar_id or "") or {}).get("name"),
+                   "avatar": avatar or (self.store.calendar(feed.calendar_id or "") or {}).get("avatar_url")}
+        posts = self.store.instagram_posts(username)
+        unread = [p for p in posts if p["events"] is None and p["attempts"] < INSTAGRAM_READ_ATTEMPTS][:reader_mod.MAX_POSTS]
+        failure = None
+        if unread:
+            today = datetime.fromtimestamp(now, sundry_src.SAST).date()
+            self.store.count_instagram_attempt(p["code"] for p in unread)
+            try:
+                readings = self.reader.read(account, unread, today)
+            except reader_mod.ReaderError as e:
+                failure = e  # the events already read are still listed below
+            else:
+                for post in unread:
+                    self.store.set_instagram_reading(post["code"], readings.get(post["code"], []))
+                posts = self.store.instagram_posts(username)
+        listings = [listing for post in posts for listing in instagram_listings(account, post)]
+        if failure is None or listings:
+            self.store.replace_listings(feed.key, listings)
+        if failure is not None:
+            raise ValueError(f"could not read @{username}'s new posts: {failure}")
+
+
+def instagram_listings(account: dict, post: dict) -> list[dict]:
+    """The events one read post announces, as listings in Cape Town."""
+    listings = []
+    url = f"{instagram_src.SITE}/p/{post['code']}/"
+    for event in post.get("events") or []:
+        try:
+            day = date.fromisoformat(event["date"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        midnight = datetime(day.year, day.month, day.day, tzinfo=sundry_src.SAST)
+
+        def at(clock: str | None) -> datetime | None:
+            return midnight + timedelta(hours=int(clock[:2]), minutes=int(clock[3:])) if clock else None
+
+        start, end = at(event.get("start")), at(event.get("end"))
+        all_day = start is None
+        if all_day:
+            start, end = midnight, midnight + timedelta(days=1)
+        elif end is not None and end <= start:
+            end += timedelta(days=1)
+        location = sundry_src.empty_location("offline")
+        location.update({"venue": event.get("venue") or account.get("name"), "address": event.get("address"),
+                         "city": "Cape Town", "region": "Western Cape", "country": "ZA"})
+        price = event.get("price") or ""
+        notes = [event.get("summary"), f"Cost: {price}" if price and not sundry_src.PLAIN_COST_RE.fullmatch(price) else None]
+        identity = f"{post['code']}|{event['date']}|{event['title'].lower()}"
+        listings.append({
+            "id": "ig-" + hashlib.sha1(identity.encode()).hexdigest()[:16], "source": "instagram", "name": event["title"],
+            "url": url, "start_at": to_iso(start), "end_at": to_iso(end) if end else None, "all_day": all_day,
+            "timezone": sundry_src.TIMEZONE, "cover_url": post.get("image"), "location": location,
+            "presenter": {"id": instagram_src.calendar_id(account["username"]), "name": account.get("name") or f"@{account['username']}",
+                          "avatar_url": account.get("avatar"), "url": f"{instagram_src.SITE}/{account['username']}/",
+                          "description": None},
+            "hosts": [], "tags": preview_mod.hashtags(post.get("caption")), "ticket": sundry_src.parse_cost(price),
+            "guest_count": None, "going_status": None, "description": "\n\n".join(n for n in notes if n) or None, "links": [],
+        })
+    return listings
+

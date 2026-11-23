@@ -144,6 +144,21 @@ MIGRATIONS: list[str] = [
         used_at REAL NOT NULL
     );
     """,
+    # 6: posts of followed Instagram accounts and what they were read to announce (see events/reader.py)
+    """
+    -- events is NULL until the post has been read, then a JSON list (empty when it announces nothing).
+    CREATE TABLE instagram_posts (
+        code TEXT PRIMARY KEY,
+        username TEXT NOT NULL,
+        taken_at TEXT NOT NULL,
+        caption TEXT NOT NULL,
+        image TEXT,
+        events TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        seen_at REAL NOT NULL
+    );
+    CREATE INDEX instagram_posts_username ON instagram_posts (username, taken_at);
+    """,
 ]
 
 

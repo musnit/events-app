@@ -76,6 +76,13 @@ class Settings:
     partiful_interval: float
     agihouse_interval: float
     sundry_interval: float
+    # Follow Instagram accounts; needs the Claude Code program to read their posts into events.
+    instagram: bool
+    instagram_interval: float
+    instagram_spacing: float
+    # The Claude Code program (a name on PATH or a path; empty for none) and the model it is asked for.
+    claude: str
+    claude_model: str
     # Pause between the pages a hand-written list links to, when reading their pictures.
     preview_spacing: float
     # Pauses between Luma requests. Luma answers bursts with 429s.
@@ -104,6 +111,11 @@ class Settings:
             agihouse_interval=_number(env, "EVENTS_AGIHOUSE_INTERVAL", 2 * HOUR, minimum=60),
             sundry_interval=_number(env, "EVENTS_SUNDRY_INTERVAL", 6 * HOUR, minimum=60),
             preview_spacing=_number(env, "EVENTS_PREVIEW_SPACING", 3),
+            instagram=_flag(env, "EVENTS_INSTAGRAM"),
+            instagram_interval=_number(env, "EVENTS_INSTAGRAM_INTERVAL", 12 * HOUR, minimum=60),
+            instagram_spacing=_number(env, "EVENTS_INSTAGRAM_SPACING", 20),
+            claude=env.get("EVENTS_CLAUDE", "claude").strip(),
+            claude_model=env.get("EVENTS_CLAUDE_MODEL", "").strip() or "opus",
             luma_spacing=_number(env, "EVENTS_LUMA_SPACING", 15),
             manual_spacing=_number(env, "EVENTS_MANUAL_SPACING", 2),
             sync_enabled=_flag(env, "EVENTS_SYNC"),

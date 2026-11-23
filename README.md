@@ -55,6 +55,15 @@ on the **Sources** page:
   week, copy the `substack.sid` cookie from a signed-in desktop browser
   into **Sources → Cape Town**.
 
+- Instagram accounts are followed from **Sources → Cape Town**. Twice a day
+  the app reads each account's six newest posts from Instagram's public
+  embed page, and Claude reads every new post and its picture to tell
+  whether it announces an event and when and where it is; those become
+  events in the Cape Town tab. The accounts behind the events Sundry Mag
+  lists are followed automatically, for two months after it last featured
+  them, and you can add or remove any account. This needs the Claude Code
+  program on the server, signed in; it uses that sign-in and no API key.
+
 The deployment can also name calendars that are always followed
 (`EVENTS_LUMA_CALENDARS`, or `services.events.lumaCalendars` in the NixOS
 module). They work without any account, even before
@@ -110,6 +119,11 @@ against it, or restore the directory from a backup.
 - Sundry Mag's list is written by hand. The app reads the first clock time
   of each line; "also Sunday" or "R80 at the door" is shown in words on the
   event's page, and an event listed without a time shows as all day.
+- Events from Instagram posts are Claude's reading of a caption and a
+  poster. It leaves out what it cannot date, and it can still misread; the
+  event's page links to the post. Instagram shows only an account's six
+  newest posts, so an account that posts more than that between two pulls
+  loses the older ones.
 - Past events are kept for 60 days, then pruned.
 
 ## Configuration
@@ -132,6 +146,11 @@ in every runtime:
 | `EVENTS_AGIHOUSE_INTERVAL` | `7200` | seconds between AGI House pulls |
 | `EVENTS_SUNDRY_INTERVAL` | `21600` | seconds between Sundry Mag pulls |
 | `EVENTS_PREVIEW_SPACING` | `3` | seconds between the linked pages read for pictures |
+| `EVENTS_INSTAGRAM` | `1` | `0` follows no Instagram accounts |
+| `EVENTS_INSTAGRAM_INTERVAL` | `43200` | seconds between pulls of one Instagram account |
+| `EVENTS_INSTAGRAM_SPACING` | `20` | seconds between Instagram accounts |
+| `EVENTS_CLAUDE` | `claude` | the Claude Code program that reads posts: a name on `PATH` (or in `~/.local/bin`) or a path; empty for none |
+| `EVENTS_CLAUDE_MODEL` | `opus` | the model Claude Code is asked for |
 | `EVENTS_LUMA_SPACING` | `15` | seconds between scheduled Luma requests |
 | `EVENTS_MANUAL_SPACING` | `2` | seconds between Luma requests you asked for |
 | `EVENTS_LEGACY_DIR` | *(none)* | import a version 1 install's JSON files from here, once |

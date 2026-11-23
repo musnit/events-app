@@ -1,6 +1,6 @@
 // Shapes returned by the Python API (see events/catalog.py and events/web.py).
 
-export type Source = "luma" | "partiful" | "agihouse" | "sundry";
+export type Source = "luma" | "partiful" | "agihouse" | "sundry" | "instagram";
 export type Area = "bay" | "cape-town" | "online" | "elsewhere" | "unknown";
 
 export interface Location {
@@ -166,6 +166,14 @@ export interface Status {
     session: boolean;
     /** Subscriber posts Substack cut short for want of a session. */
     locked: string[];
+  };
+  instagram: {
+    enabled: boolean;
+    /** Whether the Claude Code program that reads posts into events was found. */
+    reader: boolean;
+    accounts: { username: string; name: string; origins: string[]; last_error: string | null }[];
+    /** Saved posts not read yet. */
+    unread: number;
   };
   workers: Record<string, WorkerStatus>;
   feeds: FeedStatus[];

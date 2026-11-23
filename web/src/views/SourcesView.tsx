@@ -12,7 +12,7 @@ import { data, useData } from "../state/data.ts";
 import { useNow } from "../state/hooks.ts";
 import { toast } from "../state/toasts.ts";
 
-const WORKER_LABEL: Record<string, string> = { luma: "Luma", partiful: "Partiful", agihouse: "AGI House", sundry: "Sundry Mag" };
+const WORKER_LABEL: Record<string, string> = { luma: "Luma", partiful: "Partiful", agihouse: "AGI House", sundry: "Sundry Mag", instagram: "Instagram" };
 
 type Platform = "ios" | "android" | "desktop";
 
@@ -155,6 +155,55 @@ function InstallApp({ pwa }: { pwa: PwaController }) {
   );
 }
 
+/** The Instagram accounts whose posts are read into Cape Town events. */
+function InstagramAccounts({ run, onDone }: { run: (action: () => Promise<unknown>, done: string) => Promise<void>; onDone: () => void }) {
+  const { status } = useData();
+  const instagram = status?.instagram;
+  if (!instagram?.enabled) return null;
+  const featured = instagram.accounts.filter((a) => !a.origins.includes("link")).length;
+  return (
+    <>
+      <h3>Instagram accounts</h3>
+      {!instagram.reader ? (
+        <p className="callout">
+          Following accounts needs the Claude Code program on the server, to read each post and tell whether it announces an event.
+          This server has none set up (<code>EVENTS_CLAUDE</code>).
+        </p>
+      ) : (
+        <>
+          <p className="muted">
+            The app checks each account's newest posts twice a day. Claude reads every new post and its picture, and the ones that announce
+            something with a date become events. Accounts behind the events Sundry Mag lists are followed automatically.
+          </p>
+          <p className="status-line">
+            <Icon name="check" size={16} />
+            {pluralize(instagram.accounts.length, "account")}
+            {featured ? ` · ${featured} from Sundry Mag` : ""}
+            {instagram.unread ? ` · ${pluralize(instagram.unread, "post")} waiting to be read` : ""}
+          </p>
+          {instagram.accounts.length > 0 && (
+            <ul className="chip-list" aria-label="Followed Instagram accounts">
+              {instagram.accounts.map((a) => (
+                <li key={a.username} className="chip static" title={a.last_error ? `Could not refresh: ${a.last_error}` : `@${a.username}`}>
+                  {a.last_error && <Icon name="alert" size={14} />}
+                  <Link to={href({ name: "calendar", id: `instagram:${a.username}` })}>{a.name}</Link>
+                  <button type="button" className="icon-button small" aria-label={`Stop following ${a.name}`}
+                    onClick={() => void run(() => api.instagramRemove(a.username), `Stopped following ${a.name}`)}>
+                    <Icon name="close" size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <ValueForm label="Follow more accounts" placeholder="@account or instagram.com/account" multiline button="Follow"
+            submit={async (text) => `Following ${(await api.instagramAdd(text)).added.map((n) => `@${n}`).join(", ")}. Reading their posts now…`}
+            onDone={onDone} />
+        </>
+      )}
+    </>
+  );
+}
+
 export function SourcesView({ section, pwa }: { section: SourcesSection | null; pwa: PwaController }) {
   const { status, catalog } = useData();
   const now = useNow(5_000);
@@ -231,7 +280,7 @@ export function SourcesView({ section, pwa }: { section: SourcesSection | null; 
           </button>
         </div>
         <p className="muted small">
-          Luma calendars refresh every 4 hours, 15 seconds apart, because Luma blocks bursts. Your own RSVPs and Partiful refresh hourly, AGI House every 2 hours, Sundry Mag every 6.
+          Luma calendars refresh every 4 hours, 15 seconds apart, because Luma blocks bursts. Your own RSVPs and Partiful refresh hourly, AGI House every 2 hours, Sundry Mag every 6, Instagram accounts every 12.
           Anything you add syncs right away, and events appear as each calendar finishes.
         </p>
         {failing.length > 0 && (
@@ -375,42 +424,45 @@ export function SourcesView({ section, pwa }: { section: SourcesSection | null; 
         <p className="muted small">AGI House events are included automatically from its public calendar.</p>
       </Section>
 
-      {status?.sundry.enabled && (
+      {status && (status.sundry.enabled || status.instagram.enabled) && (
         <Section id="sundry" title="Cape Town" intro={
           <p>
             <a href="https://sundrymag.substack.com/" target="_blank" rel="noopener noreferrer">Sundry Mag</a> posts a list of things to do
             in Cape Town every Monday. The app reads it into the <Link to={href({ name: "cape-town" })}>Cape Town</Link> tab.
           </p>
         }>
+          {status.sundry.enabled && <>
           <p className="status-line">
-            <Icon name={status.sundry.locked.length ? "alert" : "check"} size={16} />
-            {pluralize(sundryCalendar?.upcoming_count ?? 0, "upcoming event")}
-            {status.sundry.session ? " · reading as a subscriber" : ""}
-          </p>
-          {status.sundry.locked.length > 0 && (
-            <p className="callout">
-              This week's post is for subscribers, and Substack sent only its opening{status.sundry.session ? " even with the saved session" : ""}.
-              Subscribing is free.
+              <Icon name={status.sundry.locked.length ? "alert" : "check"} size={16} />
+              {pluralize(sundryCalendar?.upcoming_count ?? 0, "upcoming event")}
+              {status.sundry.session ? " · reading as a subscriber" : ""}
             </p>
-          )}
-          {status.sundry.session ? (
-            <div className="row-wrap">
-              <span className="status-line"><Icon name="check" size={16} /> Substack session saved</span>
-              <button type="button" className="button small subtle" onClick={() => void run(api.sundryClearSession, "Removed the Substack session")}>Remove</button>
-            </div>
-          ) : (
-            <details className="more" open={status.sundry.locked.length > 0}>
-              <summary>Read subscriber posts with your Substack session</summary>
-              <ol className="steps">
-                <li>On a computer, open <a href="https://sundrymag.substack.com/" target="_blank" rel="noopener noreferrer">sundrymag.substack.com</a> signed in to an account that subscribes to it.</li>
-                <li>Open the browser's developer tools → <b>Application</b> (Chrome) or <b>Storage</b> (Firefox, Safari) → <b>Cookies</b>.</li>
-                <li>Copy the value of <code>substack.sid</code> and paste it here.</li>
-              </ol>
-              <ValueForm label="substack.sid cookie" placeholder="s%3A…" type="password" submit={async (value) =>
-                `Saved. ${pluralize((await api.sundrySetSession(value)).events, "event")} in the latest posts.`} onDone={changed} />
-              <p className="muted small">The cookie is kept on the server only and is never shown again. It signs in to your whole Substack account, so remove it here if you stop using this.</p>
-            </details>
-          )}
+            {status.sundry.locked.length > 0 && (
+              <p className="callout">
+                This week's post is for subscribers, and Substack sent only its opening{status.sundry.session ? " even with the saved session" : ""}.
+                Subscribing is free.
+              </p>
+            )}
+            {status.sundry.session ? (
+              <div className="row-wrap">
+                <span className="status-line"><Icon name="check" size={16} /> Substack session saved</span>
+                <button type="button" className="button small subtle" onClick={() => void run(api.sundryClearSession, "Removed the Substack session")}>Remove</button>
+              </div>
+            ) : (
+              <details className="more" open={status.sundry.locked.length > 0}>
+                <summary>Read subscriber posts with your Substack session</summary>
+                <ol className="steps">
+                  <li>On a computer, open <a href="https://sundrymag.substack.com/" target="_blank" rel="noopener noreferrer">sundrymag.substack.com</a> signed in to an account that subscribes to it.</li>
+                  <li>Open the browser's developer tools → <b>Application</b> (Chrome) or <b>Storage</b> (Firefox, Safari) → <b>Cookies</b>.</li>
+                  <li>Copy the value of <code>substack.sid</code> and paste it here.</li>
+                </ol>
+                <ValueForm label="substack.sid cookie" placeholder="s%3A…" type="password" submit={async (value) =>
+                  `Saved. ${pluralize((await api.sundrySetSession(value)).events, "event")} in the latest posts.`} onDone={changed} />
+                <p className="muted small">The cookie is kept on the server only and is never shown again. It signs in to your whole Substack account, so remove it here if you stop using this.</p>
+              </details>
+            )}
+          </>}
+          <InstagramAccounts run={run} onDone={changed} />
         </Section>
       )}
 
