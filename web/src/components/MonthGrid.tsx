@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { dayKey, localDayOf, monthGrid } from "../lib/dates.ts";
+import { dayKey, monthGrid } from "../lib/dates.ts";
+import { eventDayOf, eventDestination } from "../lib/event-time.ts";
 import { fmtTime } from "../lib/format.ts";
 import { href } from "../lib/routes.ts";
 import type { EventItem } from "../lib/types.ts";
@@ -11,19 +12,18 @@ const WEEKDAYS = Array.from({ length: 7 }, (_, i) =>
 const PER_DAY = 4;
 
 /** Month grid. Wide screens list a few events per day; phones show dots and link to the day. */
-export function MonthGrid({ month, events, filtersQuery }: { month: Date; events: EventItem[]; filtersQuery: string }) {
+export function MonthGrid({ month, events, filtersQuery, today = dayKey(new Date()) }: { month: Date; events: EventItem[]; filtersQuery: string; today?: string }) {
   const days = useMemo(() => monthGrid(month), [month]);
   const byDay = useMemo(() => {
     const map = new Map<string, EventItem[]>();
     for (const ev of events) {
-      const key = localDayOf(ev.start_at);
+      const key = eventDayOf(ev);
       const list = map.get(key);
       if (list) list.push(ev);
       else map.set(key, [ev]);
     }
     return map;
   }, [events]);
-  const today = dayKey(new Date());
   const weeks = days.length / 7;
 
   return (
@@ -50,7 +50,7 @@ export function MonthGrid({ month, events, filtersQuery }: { month: Date; events
                   {list.slice(0, PER_DAY).map((ev) => (
                     <li key={ev.id} data-vibe={ev.vibes[0] || "none"} className={ev.going ? "going" : ev.starred ? "starred" : ""}>
                       <Link to={href({ name: "event", id: ev.id })} options={{ background: currentRelativeUrl() }} title={ev.name}>
-                        <span className="time">{ev.all_day ? "" : fmtTime(ev.start_at)}</span> {ev.name}
+                        <span className="time">{ev.all_day ? "" : fmtTime(ev.start_at, eventDestination(ev)?.timeZone)}</span> {ev.name}
                       </Link>
                     </li>
                   ))}

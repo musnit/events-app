@@ -11,6 +11,7 @@ test("every route survives a round trip through its path", () => {
     { name: "month", month: "2026-10" },
     { name: "event", id: "evt-AbC123" },
     { name: "event", id: "pf-x_y-z" },
+    { name: "cape-town" },
     { name: "saved" },
     { name: "calendars" },
     { name: "calendar", id: "cal-Q8gsfXqUMvFaFmE" },
@@ -22,7 +23,7 @@ test("every route survives a round trip through its path", () => {
 
 test("invalid dates, ids and unknown paths are not found", () => {
   for (const path of ["day/2026-02-30", "day/tomorrow", "month/2026-13", "agenda/yesterday", "event/", "event/a b",
-    "sources/billing", "saved/extra", "calendars/x/y", "nope"]) {
+    "sources/billing", "saved/extra", "calendars/x/y", "cape-town/extra", "mumbai", "nope"]) {
     assert.equal(parseRoute(path).name, "notFound", path);
   }
   assert.deepEqual(parseRoute(""), { name: "agenda", from: null });

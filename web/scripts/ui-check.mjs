@@ -33,7 +33,8 @@ async function firstIds() {
   const data = await res.json();
   const upcoming = data.events.find((e) => Date.parse(e.start_at) > Date.now() && e.area === "bay" && e.cover_url) ?? data.events[0];
   const calendar = [...data.calendars].sort((a, b) => b.upcoming_count - a.upcoming_count)[0];
-  return { event: upcoming?.id, calendar: calendar?.id };
+  const capeTown = data.events.find((e) => Date.parse(e.start_at) > Date.now() && e.area === "cape-town") ?? data.events.find((e) => e.area === "cape-town");
+  return { event: upcoming?.id, calendar: calendar?.id, capeTown: capeTown?.id };
 }
 
 async function audit(page) {
@@ -77,6 +78,12 @@ const PAGES = [
   ["sources", "sources"],
   ["sources-luma", "sources/luma"],
   ["event", `event/${ids.event}`],
+  ["cape-town", "cape-town"],
+  ["cape-town-free", "cape-town?free=1"],
+  ["cape-town-empty", "cape-town?q=fixture-no-results-92841"],
+  ["cape-town-month", `month/${month}?area=cape-town`],
+  ["sources-sundry", "sources/sundry"],
+  ...(ids.capeTown ? [["cape-town-event", `event/${ids.capeTown}`]] : []),
   ["not-found", "nope/at/all"],
 ];
 const only = process.env.ONLY?.split(",");
@@ -100,7 +107,7 @@ for (const [vpName, options] of Object.entries(VIEWPORTS)) {
     page.on("pageerror", (err) => errors.push(String(err)));
     for (const [name, path] of PAGES) {
       if (pageFilter && !pageFilter.includes(name)) continue;
-      if (scheme === "dark" && !["upcoming", "month", "event", "sources"].includes(name)) continue;
+      if (scheme === "dark" && !["upcoming", "month", "event", "sources", "cape-town", "cape-town-event"].includes(name)) continue;
       errors.length = 0;
       await page.goto(new URL(path, BASE).toString(), { waitUntil: "networkidle" });
       await page.waitForTimeout(300);

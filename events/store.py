@@ -362,6 +362,12 @@ class Store:
                 self._bump(conn)
         return ReplaceResult(changed=changed or bool(new_ids), new_event_ids=new_ids)
 
+    def upcoming_count(self, feed_key: str) -> int:
+        """How many of a feed's listings have not started yet."""
+        row = self.db.query_one("SELECT COUNT(*) AS n FROM listings WHERE feed_key = ? AND start_at >= ?",
+                                (feed_key, to_iso(self.clock())))
+        return row["n"] if row else 0
+
     def listings(self, since_iso: str) -> list[dict]:
         """Listings starting at or after ``since_iso`` (plus ones still running), oldest first."""
         rows = self.db.query(

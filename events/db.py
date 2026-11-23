@@ -117,6 +117,20 @@ MIGRATIONS: list[str] = [
         added_at REAL NOT NULL
     );
     """,
+    # 3: research collections, a feature that was later removed (see 4)
+    """
+    CREATE TABLE research_collections (
+        id TEXT PRIMARY KEY,
+        data TEXT NOT NULL,
+        updated_at REAL NOT NULL
+    );
+    """,
+    # 4: research collections and the Mumbai area are gone. Collections were imported from files,
+    # which remain the copy to keep; a saved Mumbai area falls back to the default.
+    """
+    DROP TABLE research_collections;
+    DELETE FROM prefs WHERE key = 'area' AND value = '"mumbai"';
+    """,
 ]
 
 

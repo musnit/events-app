@@ -34,6 +34,17 @@ test("an event added by its own link shows wherever it is", () => {
   assert.equal(matchEvent({ ...far, muted: true }, EMPTY_FILTERS, ctx), false, "muting its calendar still hides it");
 });
 
+test("Cape Town is strict, even for San Francisco events added by link", () => {
+  const capeTown = event({ area: "cape-town", zone: null });
+  const sf = event({ linked: true });
+  assert.equal(matchEvent(capeTown, { ...EMPTY_FILTERS, area: "cape-town" }, ctx), true);
+  assert.equal(matchEvent(capeTown, EMPTY_FILTERS, ctx), false, "and stays out of the Bay Area");
+  assert.equal(matchEvent(sf, { ...EMPTY_FILTERS, area: "cape-town" }, ctx), false);
+  assert.equal(matchEvent(sf, EMPTY_FILTERS, { ...ctx, area: "cape-town" }), false);
+  assert.equal(matchEvent(event({ area: "online" }), { ...EMPTY_FILTERS, area: "cape-town" }, ctx), false);
+  assert.equal(matchEvent(event({}), EMPTY_FILTERS, ctx), true, "the Bay Area is as before");
+});
+
 test("vibes and topics match any chosen value, and combine with each other", () => {
   const ev = event({});
   assert.equal(matchEvent(ev, { ...EMPTY_FILTERS, vibes: ["party", "build"] }, ctx), true);

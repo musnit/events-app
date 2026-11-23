@@ -66,6 +66,12 @@ in
       description = "Include AGI House's public event list.";
     };
 
+    sundry = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Include Sundry Mag's weekly list of things to do in Cape Town.";
+    };
+
     sync = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -104,6 +110,7 @@ in
         EVENTS_STATE_DIR = cfg.stateDir;
         EVENTS_LUMA_CALENDARS = lib.concatStringsSep " " cfg.lumaCalendars;
         EVENTS_AGIHOUSE = flag cfg.agihouse;
+        EVENTS_SUNDRY = flag cfg.sundry;
         EVENTS_SYNC = flag cfg.sync;
       }
       // cfg.environment;

@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { dayKey, parseDayKey, type DayKey } from "../lib/dates.ts";
+import { areaToday, eventDayOf, sharedDestination } from "../lib/event-time.ts";
 import { groupByDay } from "../lib/event-groups.ts";
 import { fmtDayShort, relativeDay } from "../lib/format.ts";
 import { href } from "../lib/routes.ts";
 import type { EventItem } from "../lib/types.ts";
+import { useView } from "../state/view.ts";
+import { useArea } from "../state/hooks.ts";
 import { EventCard } from "./EventCard.tsx";
 import { Link } from "./Link.tsx";
 
@@ -11,6 +14,8 @@ const PAGE = 40;
 
 /** Events grouped under sticky day headings. Renders in pages as you scroll, so long lists stay fast. */
 export function EventList({ events, resetKey, empty, dayLinks = true, ongoingBefore }: { events: EventItem[]; resetKey: string; empty: ReactNode; dayLinks?: boolean; ongoingBefore?: DayKey }) {
+  const { filters } = useView();
+  const preferredArea = useArea();
   const [limit, setLimit] = useState(PAGE);
   const sentinel = useRef<HTMLDivElement>(null);
 
@@ -27,7 +32,7 @@ export function EventList({ events, resetKey, empty, dayLinks = true, ongoingBef
   }, [limit, events.length]);
 
   const groups = useMemo(() => groupByDay(events.slice(0, limit), ongoingBefore), [events, limit, ongoingBefore]);
-  const today = dayKey(new Date());
+  const todayDate = areaToday(filters.area ?? preferredArea);
 
   if (!events.length) return <>{empty}</>;
   return (
@@ -35,18 +40,21 @@ export function EventList({ events, resetKey, empty, dayLinks = true, ongoingBef
       {groups.map((group) => {
         const ongoing = group.key === "ongoing";
         const date = parseDayKey(group.key);
-        const label = ongoing ? "Ongoing" : relativeDay(group.key);
+        // A day of Cape Town events is Cape Town's day, and its link stays there.
+        const destination = sharedDestination(group.events);
+        const groupToday = destination ? areaToday(destination) : todayDate;
+        const label = ongoing ? "Ongoing" : relativeDay(group.key, groupToday);
         const full = ongoing ? label : date ? fmtDayShort(date) : group.key;
         return (
           <section key={group.key} className="day-group" aria-label={label === full ? full : `${label}, ${full}`}>
-            <h2 className={`day-heading${group.key === today ? " today" : ""}`}>
-              {dayLinks && !ongoing ? <Link to={href({ name: "day", date: group.key })}>{label}</Link> : <span>{label}</span>}
+            <h2 className={`day-heading${group.key === dayKey(groupToday) ? " today" : ""}`}>
+              {dayLinks && !ongoing ? <Link to={href({ name: "day", date: group.key }, { ...filters, ...(destination ? { area: destination } : {}) })}>{label}</Link> : <span>{label}</span>}
               {label !== full && <span className="day-date">{full}</span>}
               <span className="day-count">{group.events.length}</span>
             </h2>
             <div className="cards">
               {group.events.map((ev) => <EventCard key={ev.id} ev={ev} showDate={ongoing}
-                dateLabel={ongoing ? `Started ${fmtDayShort(new Date(ev.start_at))}` : undefined} />)}
+                dateLabel={ongoing ? `Started ${fmtDayShort(parseDayKey(eventDayOf(ev))!)}` : undefined} />)}
             </div>
           </section>
         );

@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { apiUrl } from "../lib/api.ts";
-import { localDayOf, parseDayKey } from "../lib/dates.ts";
+import { parseDayKey } from "../lib/dates.ts";
+import { destinationArea, eventDayOf } from "../lib/event-time.ts";
 import { EMPTY_FILTERS, isNew } from "../lib/filters.ts";
 import {
-  eventZoneNote, fmtDayLong, fmtPrice, fmtTimeRange, goingLabel, googleCalendarUrl, hasEnded, isHappeningNow, mapsUrl, SOURCE_LABEL,
+  eventLinkLabel, eventZoneNote, fmtDayLong, fmtPrice, fmtTimeRange, goingLabel, googleCalendarUrl, hasEnded, isHappeningNow, mapsUrl, SOURCE_LABEL,
 } from "../lib/format.ts";
 import { imgUrl } from "../lib/images.ts";
-import { href } from "../lib/routes.ts";
+import { href, type Route } from "../lib/routes.ts";
 import type { EventItem } from "../lib/types.ts";
 import { data, useData } from "../state/data.ts";
 import { toast } from "../state/toasts.ts";
@@ -45,7 +46,7 @@ export function EventDetail({ ev }: { ev: EventItem }) {
   const vibes = ev.vibes.map((id) => catalog?.vibeById.get(id)).filter((c) => !!c);
   const topics = ev.topics.map((id) => catalog?.topicById.get(id)).filter((c) => !!c);
   const zone = catalog?.zones.find((z) => z.id === ev.zone)?.label;
-  const date = parseDayKey(localDayOf(ev.start_at));
+  const date = parseDayKey(eventDayOf(ev));
   const price = fmtPrice(ev.ticket);
   const zoneNote = eventZoneNote(ev);
   const maps = mapsUrl(ev);
@@ -55,8 +56,12 @@ export function EventDetail({ ev }: { ev: EventItem }) {
     [catalog, ev],
   );
   const muted = calendars.length > 0 && calendars.every((c) => c.muted);
+  const links = (ev.links ?? []).filter((l) => /^https?:\/\//i.test(l.url));
   const loc = ev.location;
   const hostPeople = ev.hosts.filter((h) => h.name !== ev.presenter?.name);
+  // Links from a Cape Town event stay in Cape Town.
+  const destination = destinationArea(ev);
+  const home: Route = destination === "cape-town" ? { name: "cape-town" } : { name: "agenda", from: null };
 
   return (
     <article className="event-detail" data-vibe={ev.vibes[0] || "none"}>
@@ -76,7 +81,7 @@ export function EventDetail({ ev }: { ev: EventItem }) {
 
       <div className="detail-actions">
         <a className="button primary" href={ev.url} target="_blank" rel="noopener noreferrer">
-          {ev.going ? "Open" : "RSVP"} on {SOURCE_LABEL[ev.source]} <Icon name="external" size={16} />
+          {eventLinkLabel(ev)} <Icon name="external" size={16} />
         </a>
         <button type="button" className={`button${ev.starred ? " on" : ""}`} aria-pressed={ev.starred}
           onClick={() => void data.mark(ev.id, { starred: !ev.starred })}>
@@ -91,7 +96,7 @@ export function EventDetail({ ev }: { ev: EventItem }) {
         <div>
           <dt><Icon name="clock" /><span className="sr-only">When</span></dt>
           <dd>
-            <Link to={href({ name: "day", date: localDayOf(ev.start_at) })}>{date ? fmtDayLong(date) : ""}</Link>
+            <Link to={href({ name: "day", date: eventDayOf(ev) }, { ...EMPTY_FILTERS, area: destination })}>{date ? fmtDayLong(date) : ""}</Link>
             <div>{fmtTimeRange(ev)}{zoneNote && <span className="muted"> · {zoneNote} there</span>}</div>
             <div className="fact-links">
               <a href={googleCalendarUrl(ev)} target="_blank" rel="noopener noreferrer">Add to Google Calendar</a>
@@ -138,6 +143,18 @@ export function EventDetail({ ev }: { ev: EventItem }) {
         ) : null}
       </dl>
 
+      {(ev.description || links.length > 0) && (
+        <section className="detail-section">
+          <h2>Details</h2>
+          {ev.description && <p className="detail-description">{ev.description}</p>}
+          {links.length > 0 && (
+            <div className="fact-links">
+              {links.map((l) => <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer">{l.label} <Icon name="external" size={14} /></a>)}
+            </div>
+          )}
+        </section>
+      )}
+
       {conflicts.length > 0 && (
         <div className="callout">
           <strong>Overlaps with your plans:</strong>
@@ -157,12 +174,12 @@ export function EventDetail({ ev }: { ev: EventItem }) {
           <h2>Vibe</h2>
           <div className="chips">
             {vibes.map((v) => (
-              <Link key={v.id} className="chip" to={href({ name: "agenda", from: null }, { ...EMPTY_FILTERS, vibes: [v.id] })} title={v.hint}>
+              <Link key={v.id} className="chip" to={href(home, { ...EMPTY_FILTERS, vibes: [v.id] })} title={v.hint}>
                 {v.emoji} {v.label}
               </Link>
             ))}
             {topics.map((t) => (
-              <Link key={t.id} className="chip" to={href({ name: "agenda", from: null }, { ...EMPTY_FILTERS, topics: [t.id] })} title={t.hint}>
+              <Link key={t.id} className="chip" to={href(home, { ...EMPTY_FILTERS, topics: [t.id] })} title={t.hint}>
                 {t.emoji} {t.label}
               </Link>
             ))}

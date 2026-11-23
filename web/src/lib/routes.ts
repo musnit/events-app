@@ -5,20 +5,22 @@
 //   "event/evt-abc"         one event                           "saved"              going + starred
 //   "calendars"             every calendar                      "calendars/cal-abc"  one calendar
 //   "sources"               connect Luma/Partiful, sync status  "sources/luma"       …one section
+//   "cape-town"             upcoming events in Cape Town
 //
 // List views also carry filters in the query string (see filters.ts).
 
 import { parseDayKey, parseMonthKey, type DayKey } from "./dates.ts";
 import { filtersToParams, type Filters } from "./filters.ts";
 
-export type SourcesSection = "sync" | "luma" | "partiful" | "export" | "app";
-export const SOURCES_SECTIONS: SourcesSection[] = ["sync", "luma", "partiful", "export", "app"];
+export type SourcesSection = "sync" | "luma" | "partiful" | "sundry" | "export" | "app";
+export const SOURCES_SECTIONS: SourcesSection[] = ["sync", "luma", "partiful", "sundry", "export", "app"];
 
 export type Route =
   | { name: "agenda"; from: DayKey | null }
   | { name: "day"; date: DayKey }
   | { name: "month"; month: string }
   | { name: "event"; id: string }
+  | { name: "cape-town" }
   | { name: "saved" }
   | { name: "calendars" }
   | { name: "calendar"; id: string }
@@ -26,7 +28,7 @@ export type Route =
   | { name: "notFound"; path: string };
 
 /** Views whose content the filters narrow. */
-export const FILTERED_VIEWS = new Set<Route["name"]>(["agenda", "day", "month", "saved", "calendar"]);
+export const FILTERED_VIEWS = new Set<Route["name"]>(["agenda", "day", "month", "cape-town", "saved", "calendar"]);
 
 const SAFE_ID = /^[A-Za-z0-9_.:-]{1,120}$/;
 
@@ -53,6 +55,8 @@ export function parseRoute(path: string): Route {
       return arg && parseMonthKey(arg) ? { name: "month", month: arg } : notFound;
     case "event":
       return arg && SAFE_ID.test(arg) ? { name: "event", id: arg } : notFound;
+    case "cape-town":
+      return arg ? notFound : { name: "cape-town" };
     case "saved":
       return arg ? notFound : { name: "saved" };
     case "calendars":
@@ -72,6 +76,7 @@ export function routePath(route: Route): string {
     case "day": return `day/${route.date}`;
     case "month": return `month/${route.month}`;
     case "event": return `event/${encodeURIComponent(route.id)}`;
+    case "cape-town": return "cape-town";
     case "saved": return "saved";
     case "calendars": return "calendars";
     case "calendar": return `calendars/${encodeURIComponent(route.id)}`;
@@ -83,7 +88,9 @@ export function routePath(route: Route): string {
 /** A relative URL for a route; filters ride along on views they apply to. */
 export function href(route: Route, filters?: Filters): string {
   const path = routePath(route);
-  const query = filters && FILTERED_VIEWS.has(route.name) ? filtersToParams(filters).toString() : "";
+  // The Cape Town tab is its own area, so its address never repeats it.
+  const carried = filters && route.name === "cape-town" ? { ...filters, area: null } : filters;
+  const query = carried && FILTERED_VIEWS.has(route.name) ? filtersToParams(carried).toString() : "";
   // "./" keeps the root link relative to <base href> instead of the current page.
   return (path || "./") + (query ? `?${query}` : "");
 }

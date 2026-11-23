@@ -107,3 +107,25 @@ class ClassifyTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CapeTownTest(unittest.TestCase):
+    def assert_area(self, ev: dict, expected: tuple[str, str | None]) -> None:
+        self.assertEqual(areas.classify(ev), expected)
+
+    def test_named_city_address_or_coordinates(self):
+        for location in ({"city": "Cape Town", "country": "ZA"}, {"city": "Cape Town", "region": "Western Cape", "country": "ZA"},
+                         {"city": "Kaapstad"}, {"city": "Woodstock", "address": "1 Example Road, Woodstock, Cape Town, South Africa"},
+                         {"address": "1 Example Road, Cape Town"}, {"lat": -33.9249, "lng": 18.4241},
+                         {"lat": -33.9321, "lng": 18.8602, "city": "Stellenbosch"}):
+            with self.subTest(location=location):
+                self.assert_area(where(**location), ("cape-town", None))
+
+    def test_needs_location_evidence(self):
+        self.assert_area(where(name="Cape Town founders meetup", timezone="Africa/Johannesburg"), ("elsewhere", None))
+        self.assert_area(where(city="Johannesburg", country="ZA"), ("elsewhere", None))
+        self.assert_area(where(lat=-26.2041, lng=28.0473), ("elsewhere", None))
+        self.assert_area(where(city="Cape Town", country="US"), ("elsewhere", None))
+        self.assert_area(where(venue="Cape Town Cafe", city="San Francisco"), ("bay", "sf"))
+        self.assert_area(where("online", city="Cape Town"), ("online", None))
+

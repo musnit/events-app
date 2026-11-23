@@ -1,17 +1,15 @@
-import { localDayOf, type DayKey } from "./dates.ts";
+import { type DayKey } from "./dates.ts";
+import { eventDayOf, type EventClock } from "./event-time.ts";
 
 /** Group events in start order, optionally collecting earlier starts under Ongoing. */
-export function groupByDay<T extends { start_at: string }>(events: T[], ongoingBefore?: DayKey): { key: string; events: T[] }[] {
-  const groups: { key: string; events: T[] }[] = [];
+export function groupByDay<T extends EventClock>(events: T[], ongoingBefore?: DayKey): { key: string; events: T[] }[] {
+  const grouped = new Map<string, T[]>();
   for (const ev of events) {
-    const day = localDayOf(ev.start_at);
+    const day = eventDayOf(ev);
     const key = ongoingBefore && day < ongoingBefore ? "ongoing" : day;
-    let current = groups.at(-1);
-    if (!current || current.key !== key) {
-      current = { key, events: [] };
-      groups.push(current);
-    }
-    current.events.push(ev);
+    const current = grouped.get(key);
+    if (current) current.push(ev);
+    else grouped.set(key, [ev]);
   }
-  return groups;
+  return [...grouped].sort(([a], [b]) => a === "ongoing" ? -1 : b === "ongoing" ? 1 : a.localeCompare(b)).map(([key, events]) => ({ key, events }));
 }

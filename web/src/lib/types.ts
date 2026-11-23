@@ -1,7 +1,7 @@
 // Shapes returned by the Python API (see events/catalog.py and events/web.py).
 
-export type Source = "luma" | "partiful" | "agihouse";
-export type Area = "bay" | "online" | "elsewhere" | "unknown";
+export type Source = "luma" | "partiful" | "agihouse" | "sundry";
+export type Area = "bay" | "cape-town" | "online" | "elsewhere" | "unknown";
 
 export interface Location {
   type: "offline" | "online" | "unknown";
@@ -72,6 +72,10 @@ export interface EventItem {
   muted: boolean;
   /** Added by its own link, so the area filter leaves it in. */
   linked: boolean;
+  /** What the listing said in words that the fields above cannot hold. */
+  description?: string | null;
+  /** Tickets, a map pin or the venue's page, when the source links them. */
+  links?: { label: string; url: string }[];
 }
 
 export interface CalendarItem {
@@ -157,12 +161,18 @@ export interface Status {
     accounts: { uid: string; name: string | null; added_at: number }[];
     feed: string | null;
   };
+  sundry: {
+    enabled: boolean;
+    session: boolean;
+    /** Subscriber posts Substack cut short for want of a session. */
+    locked: string[];
+  };
   workers: Record<string, WorkerStatus>;
   feeds: FeedStatus[];
   prefs: { muted_calendars?: string[]; area?: AreaChoice };
 }
 
-export type AreaChoice = "bay" | "bay-online" | "all";
+export type AreaChoice = "bay" | "bay-online" | "cape-town" | "all";
 
 export interface LinkedEvent {
   id: string;

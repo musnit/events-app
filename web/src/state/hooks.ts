@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { facetCounts, matchEvent, type FacetCounts, type Filters, type MatchContext } from "../lib/filters.ts";
 import type { AreaChoice, EventItem } from "../lib/types.ts";
 import { useData, type Catalog } from "./data.ts";
+import { useViewArea } from "./view.ts";
 
 /** The current time, refreshed every ``everyMs`` so "today" and "happening now" stay right. */
 export function useNow(everyMs = 60_000): number {
@@ -26,9 +27,11 @@ export function useMediaQuery(query: string): boolean {
 
 export const WIDE_QUERY = "(min-width: 960px)";
 
+/** The area lists show when no filter names one: the view's own, or else the saved preference. */
 export function useArea(): AreaChoice {
   const { status } = useData();
-  return status?.prefs.area ?? "bay";
+  const pinned = useViewArea();
+  return pinned ?? status?.prefs.area ?? "bay";
 }
 
 export function useMatchContext(catalog: Catalog | null, area?: AreaChoice): MatchContext {

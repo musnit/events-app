@@ -10,6 +10,9 @@
                  "approval", "waitlist", "availability"} | None,
       "guest_count": int | None,
       "going_status": str | None,   # the user's own RSVP when the upstream reports it
+      # Optional, for sources written by hand:
+      "description": str | None,    # what the listing said that the fields above cannot hold
+      "links": [{"label", "url"}],  # tickets, a map pin, the venue's page
     }
 
 Times are canonical UTC strings (see ``timeutil``).

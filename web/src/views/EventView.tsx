@@ -28,8 +28,8 @@ export function EventPage({ id }: { id: string }) {
   return (
     <div className="page event-page">
       <div className="page-header back-row">
-        <Link className="button subtle" to={href({ name: "agenda", from: null })}>
-          <Icon name="chevronLeft" size={18} /> Upcoming
+        <Link className="button subtle" to={href(ev?.area === "cape-town" ? { name: "cape-town" } : { name: "agenda", from: null })}>
+          <Icon name="chevronLeft" size={18} /> {ev?.area === "cape-town" ? "Cape Town" : "Upcoming"}
         </Link>
       </div>
       {ev ? <EventDetail ev={ev} /> : <Missing loading={loading || !catalog} />}

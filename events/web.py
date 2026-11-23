@@ -21,13 +21,14 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import __version__, ics
+from . import __version__, ics, net
 from .catalog import Catalog
 from .config import Settings
 from .sources import luma as luma_src
 from .sources import partiful as partiful_src
+from .sources import sundry as sundry_src
 from .store import Store
-from .sync import Sync, linked_feed
+from .sync import SUNDRY_FEED, Sync, linked_feed
 from .timeutil import to_iso
 
 log = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ SECURITY_HEADERS = {
 CSP = ("default-src 'self'; img-src 'self' https: data:; style-src 'self'; script-src 'self'; connect-src 'self'; "
        "manifest-src 'self'; worker-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; "
        "form-action 'self'; frame-ancestors 'none'")
-AREAS = ("bay", "bay-online", "all")
+AREAS = ("bay", "bay-online", "cape-town", "all")
 
 
 class ApiError(Exception):
@@ -152,6 +153,8 @@ class App:
         r("DELETE", "/api/partiful/accounts/{uid}", self.partiful_remove_account)
         r("PUT", "/api/partiful/feed", self.partiful_set_feed)
         r("DELETE", "/api/partiful/feed", self.partiful_clear_feed)
+        r("PUT", "/api/sundry/session", self.sundry_set_session)
+        r("DELETE", "/api/sundry/session", self.sundry_clear_session)
         r("GET", "/feed.ics", self.feed_ics)
 
     # ---------- dispatch ----------
@@ -271,6 +274,8 @@ class App:
                                    "last_error": errors.get(linked_feed(e["event_id"]))} for e in self.store.linked_events()],
             },
             "partiful": {"accounts": accounts, "feed": mask((feed_cfg or {}).get("url"))},
+            "sundry": {"enabled": self.settings.sundry, "session": bool(self.store.get_secret("substack_session")),
+                       "locked": self._sundry_locked()},
             "workers": self.sync.status(),
             "feeds": feeds,
             "prefs": self.store.prefs(),
@@ -278,7 +283,7 @@ class App:
 
     def refresh(self, req: Request) -> Response:
         source = req.json().get("source")
-        if source not in (None, "luma", "partiful", "agihouse"):
+        if source not in (None, *self.sync.workers):
             raise ApiError(400, "unknown source")
         return json_response({"queued": self.sync.refresh(source)})
 
@@ -397,6 +402,36 @@ class App:
     def luma_clear_ics(self, req: Request) -> Response:
         self.store.delete_secret("luma_ics")
         self.sync.sources_changed()
+        return json_response({"ok": True})
+
+    # ---------- Sundry Mag ----------
+
+    def _sundry_locked(self) -> list[str]:
+        try:
+            locked = json.loads(self.store.get_meta("sundry_locked") or "[]")
+        except ValueError:
+            return []
+        return [str(title) for title in locked] if isinstance(locked, list) else []
+
+    def sundry_set_session(self, req: Request) -> Response:
+        try:
+            sid = sundry_src.parse_session(str(req.json().get("session") or ""))
+        except ValueError as e:
+            raise ApiError(400, str(e)) from None
+        try:
+            pull = self.sync.sundry.events(sid)
+        except (sundry_src.SundryError, net.NetError) as e:
+            raise ApiError(400, f"Could not read Sundry Mag with that session: {e}") from None
+        if pull.locked:
+            raise ApiError(400, "Substack still sends only the opening of this week's post with that session. "
+                                "Check that the account is subscribed to Sundry Mag and copy the cookie again.")
+        self.store.set_secret("substack_session", {"sid": sid})
+        self.sync.sources_changed(refresh=[SUNDRY_FEED])
+        return json_response({"ok": True, "events": len(pull.events)})
+
+    def sundry_clear_session(self, req: Request) -> Response:
+        self.store.delete_secret("substack_session")
+        self.sync.sources_changed(refresh=[SUNDRY_FEED])
         return json_response({"ok": True})
 
     # ---------- Partiful ----------

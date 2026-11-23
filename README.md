@@ -1,8 +1,8 @@
 # Events
 
 Events gathers every upcoming event from the Luma calendars you follow,
-your Partiful invites and the events of people you follow there, and AGI
-House into one calendar. The same event listed in two places appears once.
+your Partiful invites and the events of people you follow there, AGI
+House and Sundry Mag's weekly Cape Town list into one calendar. The same event listed in two places appears once.
 Each event is sorted into vibes (party, meet people, learn, build, get
 moving, chill, food, games…) and topics (AI, crypto, startups…). Filter
 by those, by time of day, weekend, Bay Area neighbourhood, crowd size and
@@ -12,6 +12,12 @@ marked. Every view, date and filter has its own URL: `/`,
 `/agenda/2026-10-03`, `/day/…`, `/month/2026-10`, `/event/<id>`, `/saved`,
 `/calendars`, `/sources` and `?vibe=party&topic=ai&time=evening`. It
 installs on a phone as an app.
+
+The **Cape Town** tab at `/cape-town` is the same list for Cape Town alone:
+every event from your calendars that takes place there, and the week's
+events from Sundry Mag. Its dates and times are Cape Town's, wherever you
+open the app, and the same filters apply. **Cape Town** is also a choice
+under **Where**, which makes it the area the other views show.
 
 ## Connect your calendars
 
@@ -35,16 +41,25 @@ on the **Sources** page:
   **Add calendars or events by link**. An event link adds just that event,
   private ones included: Luma lists only public events on a calendar, so a
   private event otherwise reaches the app only through your own
-  registrations. An event added by link shows whichever area you choose.
+  registrations. An event added by link shows whichever area you choose,
+  except Cape Town, which shows only what happens there.
+- [Sundry Mag](https://sundrymag.substack.com/) posts "What to Do In Cape
+  Town This Week" every Monday, and the app reads each event's day, time,
+  place and cost from it without any account. Recent posts are for
+  subscribers, which is free; without a subscriber's session Substack
+  sends only the opening of the post, and the app says so. To read the whole
+  week, copy the `substack.sid` cookie from a signed-in desktop browser
+  into **Sources → Cape Town**.
 
 The deployment can also name calendars that are always followed
 (`EVENTS_LUMA_CALENDARS`, or `services.events.lumaCalendars` in the NixOS
 module). They work without any account, even before
 anyone opens the app, and the app cannot remove them. AGI House's public
-events are included unless turned off.
+events and Sundry Mag's list are included unless turned off.
 
 Sources refresh in the background: Luma calendars every 4 hours, your
-personal Luma and Partiful feeds hourly and AGI House every 2 hours.
+personal Luma and Partiful feeds hourly, AGI House every 2 hours and
+Sundry Mag every 6.
 **Sync** on the Sources page pulls one source now, and **Sync everything
 now** pulls them all. The page shows when each feed last worked, and its
 error when it did not.
@@ -85,6 +100,9 @@ against it, or restore the directory from a backup.
 - Luma's email-code sign-in is behind a bot check, so the app cannot sign
   in to Luma itself. It uses the bookmarklet, a pasted cookie or the
   iCal link.
+- Sundry Mag's list is written by hand. The app reads the first clock time
+  of each line; "also Sunday" or "R80 at the door" is shown in words on the
+  event's page, and an event listed without a time shows as all day.
 - Past events are kept for 60 days, then pruned.
 
 ## Configuration
@@ -99,11 +117,13 @@ in every runtime:
 | `EVENTS_WEB_DIR` | `web/dist` beside the code | the built web app (the Nix package sets its own) |
 | `EVENTS_LUMA_CALENDARS` | *(none)* | Luma calendars always followed: links, slugs or `cal-` ids, separated by spaces or commas |
 | `EVENTS_AGIHOUSE` | `1` | `0` leaves AGI House out |
+| `EVENTS_SUNDRY` | `1` | `0` leaves Sundry Mag's Cape Town list out |
 | `EVENTS_SYNC` | `1` | `0` serves the database without pulling anything |
 | `EVENTS_LUMA_INTERVAL` | `14400` | seconds between pulls of each Luma calendar |
 | `EVENTS_PERSONAL_INTERVAL` | `3600` | seconds between pulls of your Luma follows, registrations and iCal link |
 | `EVENTS_PARTIFUL_INTERVAL` | `3600` | seconds between Partiful pulls |
 | `EVENTS_AGIHOUSE_INTERVAL` | `7200` | seconds between AGI House pulls |
+| `EVENTS_SUNDRY_INTERVAL` | `21600` | seconds between Sundry Mag pulls |
 | `EVENTS_LUMA_SPACING` | `15` | seconds between scheduled Luma requests |
 | `EVENTS_MANUAL_SPACING` | `2` | seconds between Luma requests you asked for |
 | `EVENTS_LEGACY_DIR` | *(none)* | import a version 1 install's JSON files from here, once |
