@@ -81,6 +81,9 @@ def clean_url(url: str | None) -> str | None:
     if parts.scheme not in ("http", "https") or not parts.hostname:
         return None
     query = [(k, v) for k, v in urllib.parse.parse_qsl(parts.query, keep_blank_values=True) if not TRACKING.match(k)]
+    if parts.hostname.lower().removeprefix("www.") == "instagram.com":
+        # A shared Instagram link has a random tracking value under a random name; the path alone is the post.
+        return urllib.parse.urlunsplit(("https", "www.instagram.com", parts.path.rstrip("/") + "/", "", ""))
     # Quicket's "#/" is a client-side route, not a place on the page.
     fragment = "" if parts.fragment in ("/", "") else parts.fragment
     return urllib.parse.urlunsplit((parts.scheme, parts.netloc, parts.path, urllib.parse.urlencode(query), fragment))

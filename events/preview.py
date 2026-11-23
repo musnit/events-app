@@ -77,8 +77,14 @@ class _CheckedRedirects(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
+def _encoded(url: str) -> str:
+    """Pages write addresses with spaces and accents in them; escape what a request line cannot carry."""
+    return urllib.parse.quote(url.strip(), safe="%/:=&?~#+!$,;'@()*[]")
+
+
 def fetch_public(url: str, max_bytes: int, *, timeout: float = 20) -> net.Response:
     """GET a public page or picture, following only redirects that stay public."""
+    url = _encoded(url)
     require_public(url)
     opener = urllib.request.build_opener(_CheckedRedirects)
     req = urllib.request.Request(url, headers={"user-agent": net.USER_AGENT, "accept": "*/*", "accept-language": "en"})
@@ -242,8 +248,9 @@ class PreviewClient:
         page = self._fetch(url, MAX_PAGE_BYTES)
         found = parse_page(url, page.text())
         if host_of(url) in INSTAGRAM_HOSTS and not found["image_url"]:
-            # A real post always has a picture; without one Instagram served its sign-in page instead.
-            raise PreviewError("Instagram did not describe the post", blocked=True)
+            # A removed or private post gets Instagram's bare shell, and so does every post once Instagram
+            # stops answering this client. The caller tells the two apart by how many fail in a row.
+            raise PreviewError("Instagram did not describe the post")
         image = None
         if found["image_url"]:
             try:

@@ -141,11 +141,16 @@ class ClientTest(unittest.TestCase):
         self.assertEqual(client.get(POST)["image"], found["image"], "the same picture has the same name")
         self.assertEqual(len(list(self.media.iterdir())), 1)
 
-    def test_instagram_without_a_picture_means_we_are_turned_away(self):
+    def test_an_instagram_post_without_a_picture_is_a_failure_of_that_post(self):
         self.pages[POST] = "<html><title>Instagram</title></html>"
-        with self.assertRaises(PreviewError) as raised:
+        with self.assertRaisesRegex(PreviewError, "did not describe the post") as raised:
             PreviewClient(self.media, self.fetch).get(POST)
-        self.assertTrue(raised.exception.blocked)
+        self.assertFalse(raised.exception.blocked, "a removed post looks the same; the pull counts how many fail in a row")
+
+    def test_addresses_with_spaces_and_accents_are_escaped(self):
+        self.assertEqual(preview._encoded(" https://img.fixture.test/a b/café 1.jpg?x=1&y=é#f "),
+                         "https://img.fixture.test/a%20b/caf%C3%A9%201.jpg?x=1&y=%C3%A9#f")
+        self.assertEqual(preview._encoded("https://img.fixture.test/a%20b.jpg?sig=a%2Fb"), "https://img.fixture.test/a%20b.jpg?sig=a%2Fb")
 
     def test_a_picture_that_fails_or_is_not_a_picture_still_leaves_the_words(self):
         for bad in (PreviewError("answered 403"), b"<html>not a picture</html>", b""):
