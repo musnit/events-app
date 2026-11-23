@@ -24,11 +24,12 @@ from pathlib import Path
 from . import __version__, ics, net
 from .catalog import Catalog
 from .config import Settings
+from .preview import MEDIA_NAME_RE
 from .sources import luma as luma_src
 from .sources import partiful as partiful_src
 from .sources import sundry as sundry_src
 from .store import Store
-from .sync import SUNDRY_FEED, Sync, linked_feed
+from .sync import MEDIA_DIR, SUNDRY_FEED, Sync, linked_feed
 from .timeutil import to_iso
 
 log = logging.getLogger(__name__)
@@ -136,6 +137,7 @@ class App:
         r = self.router.add
         r("GET", "/api/health", self.health)
         r("GET", "/api/events", self.events)
+        r("GET", "/media/{name}", self.media)
         r("GET", "/api/events/{event_id}/ics", self.event_ics)
         r("PUT", "/api/events/{event_id}/mark", self.mark_event)
         r("GET", "/api/status", self.status)
@@ -472,6 +474,18 @@ class App:
         self.store.delete_secret("partiful_feed")
         self.sync.sources_changed()
         return json_response({"ok": True})
+
+    def media(self, req: Request) -> Response:
+        """A picture saved from an event's linked page. The name is the hash of its bytes, so it never changes."""
+        name = req.params["name"]
+        if not MEDIA_NAME_RE.match(name):
+            return Response(404, b"not found", "text/plain; charset=utf-8")
+        try:
+            body = (self.settings.state_dir / MEDIA_DIR / name).read_bytes()
+        except OSError:
+            return Response(404, b"not found", "text/plain; charset=utf-8")
+        kind = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp", "gif": "image/gif"}[name.rsplit(".", 1)[1]]
+        return Response(200, body, kind, {"Cache-Control": "private, max-age=31536000, immutable"})
 
     # ---------- the web app ----------
 

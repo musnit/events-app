@@ -387,6 +387,69 @@ class Store:
                         "first_seen_at": row["first_seen_at"], "announced_at": row["announced_at"]})
         return out
 
+    # ---------- link previews ----------
+
+    def previews(self, urls: Iterable[str]) -> dict[str, dict]:
+        """The saved preview of each address that has one."""
+        wanted = list(dict.fromkeys(urls))
+        found: dict[str, dict] = {}
+        for start in range(0, len(wanted), 500):
+            chunk = wanted[start:start + 500]
+            for row in self.db.query(f"SELECT url, data FROM link_previews WHERE data IS NOT NULL AND url IN "
+                                     f"({','.join('?' * len(chunk))})", tuple(chunk)):
+                try:
+                    found[row["url"]] = json.loads(row["data"])
+                except ValueError:
+                    continue
+        return found
+
+    def previews_due(self, urls: Iterable[str]) -> list[str]:
+        """Addresses never read, or whose last failure may be tried again. Marks every address as still in use."""
+        wanted = list(dict.fromkeys(urls))
+        now = self.clock()
+        known = {}
+        with self.db.transaction() as conn:
+            for start in range(0, len(wanted), 500):
+                chunk = wanted[start:start + 500]
+                marks = ",".join("?" * len(chunk))
+                conn.execute(f"UPDATE link_previews SET used_at = ? WHERE url IN ({marks})", (now, *chunk))
+                for row in conn.execute(f"SELECT url, data, retry_at FROM link_previews WHERE url IN ({marks})", tuple(chunk)):
+                    known[row["url"]] = row
+        return [url for url in wanted if url not in known
+                or (known[url]["data"] is None and (known[url]["retry_at"] is None or known[url]["retry_at"] <= now))]
+
+    def save_preview(self, url: str, data: dict) -> None:
+        now = self.clock()
+        self.db.execute(
+            "INSERT INTO link_previews (url, data, fetched_at, failures, last_error, retry_at, used_at) VALUES (?, ?, ?, 0, NULL, NULL, ?) "
+            "ON CONFLICT(url) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at, failures = 0, "
+            "last_error = NULL, retry_at = NULL, used_at = excluded.used_at", (url, json.dumps(scrub(data)), now, now))
+
+    def fail_preview(self, url: str, error: str) -> None:
+        """Try again in 6 h, 12 h, a day … up to a week."""
+        now = self.clock()
+        with self.db.transaction() as conn:
+            row = conn.execute("SELECT failures FROM link_previews WHERE url = ?", (url,)).fetchone()
+            failures = (row["failures"] if row else 0) + 1
+            retry_at = now + min(7 * 86400, 6 * 3600 * 2 ** (failures - 1))
+            conn.execute(
+                "INSERT INTO link_previews (url, data, fetched_at, failures, last_error, retry_at, used_at) VALUES (?, NULL, NULL, ?, ?, ?, ?) "
+                "ON CONFLICT(url) DO UPDATE SET failures = excluded.failures, last_error = excluded.last_error, "
+                "retry_at = excluded.retry_at", (url, failures, error[:300], retry_at, now))
+
+    def prune_previews(self, keep_days: float = HISTORY_KEEP_DAYS) -> set[str]:
+        """Forget previews no pull has asked about for ``keep_days``. Returns the pictures still in use."""
+        self.db.execute("DELETE FROM link_previews WHERE used_at < ?", (self.clock() - keep_days * 86400,))
+        images = set()
+        for row in self.db.query("SELECT data FROM link_previews WHERE data IS NOT NULL"):
+            try:
+                image = json.loads(row["data"]).get("image")
+            except (ValueError, AttributeError):
+                continue
+            if image:
+                images.add(image)
+        return images
+
     # ---------- RSVPs known by id ----------
 
     def replace_going(self, origin: str, statuses: dict[str, str]) -> None:

@@ -47,7 +47,11 @@ on the **Sources** page:
   Town This Week" every Monday, and the app reads each event's day, time,
   place and cost from it without any account. Recent posts are for
   subscribers, which is free; without a subscriber's session Substack
-  sends only the opening of the post, and the app says so. To read the whole
+  sends only the opening of the post, and the app says so. Each event links
+  to the organiser's own post, usually on Instagram or Quicket, and the app
+  reads that page's link preview for the picture, the organiser and their
+  description. It keeps a copy of the picture, because Instagram's image
+  links expire. To read the whole
   week, copy the `substack.sid` cookie from a signed-in desktop browser
   into **Sources → Cape Town**.
 
@@ -63,6 +67,9 @@ Sundry Mag every 6.
 **Sync** on the Sources page pulls one source now, and **Sync everything
 now** pulls them all. The page shows when each feed last worked, and its
 error when it did not.
+
+The database is `events.db` in the state directory, and the pictures saved
+from linked pages are in `media/` beside it.
 
 ## Authentication and access
 
@@ -124,6 +131,7 @@ in every runtime:
 | `EVENTS_PARTIFUL_INTERVAL` | `3600` | seconds between Partiful pulls |
 | `EVENTS_AGIHOUSE_INTERVAL` | `7200` | seconds between AGI House pulls |
 | `EVENTS_SUNDRY_INTERVAL` | `21600` | seconds between Sundry Mag pulls |
+| `EVENTS_PREVIEW_SPACING` | `3` | seconds between the linked pages read for pictures |
 | `EVENTS_LUMA_SPACING` | `15` | seconds between scheduled Luma requests |
 | `EVENTS_MANUAL_SPACING` | `2` | seconds between Luma requests you asked for |
 | `EVENTS_LEGACY_DIR` | *(none)* | import a version 1 install's JSON files from here, once |

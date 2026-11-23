@@ -131,6 +131,19 @@ MIGRATIONS: list[str] = [
     DROP TABLE research_collections;
     DELETE FROM prefs WHERE key = 'area' AND value = '"mumbai"';
     """,
+    # 5: what the pages that hand-written lists link to say about themselves (see events/preview.py)
+    """
+    -- data is the preview as JSON, or NULL while only failures are known.
+    CREATE TABLE link_previews (
+        url TEXT PRIMARY KEY,
+        data TEXT,
+        fetched_at REAL,
+        failures INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        retry_at REAL,
+        used_at REAL NOT NULL
+    );
+    """,
 ]
 
 

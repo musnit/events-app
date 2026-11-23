@@ -65,7 +65,7 @@ def temp_dir(test: unittest.TestCase) -> Path:
 def make_settings(root: Path, **env: str) -> Settings:
     values = {"EVENTS_STATE_DIR": str(root / "state"), "EVENTS_WEB_DIR": str(root / "web"), "EVENTS_SYNC": "0",
               # Off unless a test asks: every other test counts the feeds of the three original sources.
-              "EVENTS_SUNDRY": "0"}
+              "EVENTS_SUNDRY": "0", "EVENTS_PREVIEW_SPACING": "0"}
     values.update(env)
     return Settings.from_env(values)
 
@@ -196,6 +196,27 @@ class FakeSundry:
     def events(self, session: str | None = None):
         self.sessions.append(session)
         return _answer(self.pull)
+
+
+class FakePreviews:
+    """Stands in for ``PreviewClient``: ``pages`` maps an address to its preview, or to an exception to raise."""
+
+    def __init__(self, pages: dict[str, object] | None = None):
+        self.pages = pages or {}
+        self.calls: list[str] = []
+        self.pruned: list[tuple[set[str], float]] = []
+
+    def get(self, url: str) -> dict:
+        from events.preview import PreviewError
+
+        self.calls.append(url)
+        if url not in self.pages:
+            raise PreviewError("no such page")
+        return _answer(self.pages[url])
+
+    def prune(self, keep: set[str], older_than: float) -> int:
+        self.pruned.append((keep, older_than))
+        return 0
 
 
 def jwt(claims: dict) -> str:

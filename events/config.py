@@ -76,6 +76,8 @@ class Settings:
     partiful_interval: float
     agihouse_interval: float
     sundry_interval: float
+    # Pause between the pages a hand-written list links to, when reading their pictures.
+    preview_spacing: float
     # Pauses between Luma requests. Luma answers bursts with 429s.
     luma_spacing: float
     manual_spacing: float
@@ -101,6 +103,7 @@ class Settings:
             partiful_interval=_number(env, "EVENTS_PARTIFUL_INTERVAL", 1 * HOUR, minimum=60),
             agihouse_interval=_number(env, "EVENTS_AGIHOUSE_INTERVAL", 2 * HOUR, minimum=60),
             sundry_interval=_number(env, "EVENTS_SUNDRY_INTERVAL", 6 * HOUR, minimum=60),
+            preview_spacing=_number(env, "EVENTS_PREVIEW_SPACING", 3),
             luma_spacing=_number(env, "EVENTS_LUMA_SPACING", 15),
             manual_spacing=_number(env, "EVENTS_MANUAL_SPACING", 2),
             sync_enabled=_flag(env, "EVENTS_SYNC"),
