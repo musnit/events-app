@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-RULES_VERSION = 5
+RULES_VERSION = 6
 THRESHOLD = 3.0
 MAX_PER_KIND = 3
 FIELD_WEIGHTS = {"title": 3.0, "tags": 2.0, "presenter": 2.0, "description": 1.0, "hosts": 0.75}
@@ -222,7 +222,7 @@ def event_fields(ev: dict, calendar_names: list[str] | tuple[str, ...] = ()) -> 
         "title": ev.get("name") or "",
         "tags": " · ".join(ev.get("tags") or []),
         "presenter": " · ".join(x for x in (presenter.get("name"), calendar_names) if x),
-        "description": presenter.get("description") or "",
+        "description": " ".join(filter(None, (presenter.get("description"), ev.get("description")))),
         "hosts": " · ".join(h.get("name") or "" for h in ev.get("hosts") or []),
     }
 

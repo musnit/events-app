@@ -106,6 +106,16 @@ class ParsePostTest(unittest.TestCase):
         self.assertEqual([e["start_at"] for e in events], ["2026-09-28T16:00:00Z", "2026-10-05T16:00:00Z"])
         self.assertEqual(len({e["id"] for e in events}), 2)
 
+    def test_links_lose_their_tracking_values(self):
+        clean = sundry.clean_url
+        for shared in ("https://www.instagram.com/p/FixturePost01/?bqrl=NTc4MTIwNjQ2YQ%3D%3D", "http://instagram.com/p/FixturePost01",
+                       "https://www.instagram.com/p/FixturePost01/?utm_source=ig_web_copy_link&jplx=Mz&avpt=Mz"):
+            self.assertEqual(clean(shared), "https://www.instagram.com/p/FixturePost01/", shared)
+        self.assertEqual(clean("https://www.instagram.com/fixture_basement/?hl=en"), "https://www.instagram.com/fixture_basement/")
+        self.assertEqual(clean("https://tickets.fixture.test/v2/event.aspx?itemid=42&utm_medium=x"), "https://tickets.fixture.test/v2/event.aspx?itemid=42")
+        for bad in ("javascript:alert(1)", "mailto:a@fixture.test", "", None, "https://"):
+            self.assertIsNone(clean(bad))
+
     def test_nothing_before_a_dated_heading_and_no_crash_on_junk(self):
         self.assertEqual(sundry.parse_post("<ul>" + item("Fixture Orphan", None, "6PM", "Somewhere", "Free") + "</ul>", PUBLISHED), [])
         self.assertEqual(sundry.parse_post("", PUBLISHED), [])
@@ -314,26 +324,45 @@ class SyncTest(unittest.TestCase):
         self.assertEqual(sorted(self.pages.calls[first:]), ["https://supper.fixture.test/", "https://www.quicket.co.za/events/100001-fixture-film/"],
                          "Monday's run is more than a day old, the read page is kept, and the failed ones are tried again")
 
+    def instagram_week(self, count: int) -> list[str]:
+        links = [f"https://www.instagram.com/p/FixtureNight{n}/" for n in range(count)]
+        days = [(f"Friday, October 2, 2026", [item(f"Fixture Night {n}", link, f"{n + 1}:00PM", "Fixture Basement", "R50")
+                                              for n, link in enumerate(links)])]
+        self.source.pull = sundry.Pull(sundry.parse_post(body(*days), PUBLISHED))
+        return links
+
+    def test_one_post_that_will_not_load_does_not_stop_the_rest(self):
+        links = self.instagram_week(6)
+        words = {"image": None, "author": None, "text": "Words", "venue": None, "address": None, "tags": []}
+        self.pages.pages = {link: words for link in links if link != links[1]}
+        self.pages.pages[links[1]] = PreviewError("Instagram did not describe the post")
+        sync = self.sync()
+        sync.reconcile()
+        self.pull(sync)
+        self.assertEqual(self.pages.calls, links)
+        self.assertEqual(len(self.store.previews(links)), 5)
+
     def test_a_site_turning_us_away_is_left_for_the_next_pull(self):
-        late = "https://www.instagram.com/p/FixtureLate1/"
-        more = "https://www.instagram.com/p/FixtureMore1/"
-        extra = sundry.parse_post(body(("Friday, October 2, 2026", [item("Fixture Second Night", more, "8:00PM", "Fixture Basement", "R50")])),
-                                  PUBLISHED)
-        self.source.pull = sundry.Pull(self.week + extra)
-        self.pages.pages = {late: PreviewError("Instagram did not describe the post", blocked=True)}
+        links = self.instagram_week(7)
+        self.pages.pages = {link: PreviewError("Instagram did not describe the post") for link in links}
         sync = self.sync()
         sync.reconcile()
         with self.assertLogs("events.sync", "WARNING"):
             self.pull(sync)
-        self.assertIn(late, self.pages.calls)
-        self.assertNotIn(more, self.pages.calls, "the next Instagram page is not asked for")
-        self.assertIn("https://supper.fixture.test/", self.pages.calls, "other sites are still read")
-        self.assertEqual(self.store.feed(SUNDRY_FEED).item_count, 6, "the events themselves are stored all the same")
-        self.pages.pages = {late: {"image": None, "author": None, "text": "Back", "venue": None, "address": None, "tags": []},
-                            more: {"image": None, "author": None, "text": "Too", "venue": None, "address": None, "tags": []}}
+        self.assertEqual(self.pages.calls, links[:4], "four in a row is the site's doing, so the rest are not asked for")
+        self.assertEqual(self.store.feed(SUNDRY_FEED).item_count, 7, "the events themselves are stored all the same")
         self.pages.calls.clear()
+        self.pages.pages = {link: PreviewError("answered 429", blocked=True) for link in links}
+        with self.assertLogs("events.sync", "WARNING"):
+            self.pull(sync)
+        self.assertEqual(self.pages.calls, links[4:5], "a refusal stops at once, and is not held against the page")
+        self.pages.calls.clear()
+        self.pages.pages = {link: {"image": None, "author": None, "text": "Back", "venue": None, "address": None, "tags": []} for link in links}
         self.pull(sync)
-        self.assertEqual(sorted(self.pages.calls), [late, more], "and both are read on the next pull, without waiting out a failure")
+        self.assertEqual(self.pages.calls, links[4:], "the pages never tried are read on the next pull")
+        self.clock.advance(7 * 3600)
+        self.pull(sync)
+        self.assertEqual(len(self.store.previews(links)), 7, "and the four that failed after their wait")
 
     def test_housekeeping_forgets_unused_previews_and_keeps_pictures_in_use(self):
         self.store.save_preview("https://old.fixture.test/", {"image": "media/" + "b" * 32 + ".jpg"})

@@ -40,6 +40,8 @@ MEDIA_DIR = "media"
 # How many linked pages one pull reads at most; the rest wait for the next pull.
 PREVIEWS_PER_PULL = 150
 PREVIEW_SAVE_EVERY = 8
+# One page that will not load is that page's trouble; this many in a row from one site is the site's.
+PREVIEW_MISSES_IN_A_ROW = 4
 CONFIG_NEVER_STALE = 10 * 365 * 86400
 RATE_LIMIT_PAUSES = (45, 90, 180, 300)
 IDLE_CHECK_S = 60
@@ -606,6 +608,7 @@ class Sync:
         coming = [ev["url"] for ev in events if ev["start_at"] >= yesterday and ev["url"] != sundry_src.SITE]
         due = self.store.previews_due(coming)[:PREVIEWS_PER_PULL]
         blocked: set[str] = set()
+        misses: dict[str, int] = {}  # failures in a row, by site
         fresh = 0
         for url in due:
             host = preview_mod.host_of(url)
@@ -616,16 +619,21 @@ class Sync:
             try:
                 self.store.save_preview(url, self.previews.get(url))
                 fresh += 1
+                misses[host] = 0
+                continue_reading = True
             except preview_mod.PreviewError as e:
-                if e.blocked:
-                    # Leave this site's other pages untried, so the next pull starts on them afresh.
-                    log.warning("sundry: %s is turning requests away (%s); its pages wait for the next pull", host, e)
-                    blocked.add(host)
-                else:
+                misses[host] = misses.get(host, 0) + 1
+                continue_reading = not e.blocked and misses[host] < PREVIEW_MISSES_IN_A_ROW
+                if not e.blocked:
                     self.store.fail_preview(url, str(e))
+                if not continue_reading:
+                    log.warning("sundry: %s is turning requests away (%s); its other pages wait for the next pull", host, e)
             except Exception as e:  # one odd page must not cost the others their pictures
                 log.warning("sundry: could not read %s: %s", net.redact(url), e)
                 self.store.fail_preview(url, str(e) or e.__class__.__name__)
+                continue_reading = True
+            if not continue_reading:
+                blocked.add(host)
             if fresh and fresh % PREVIEW_SAVE_EVERY == 0:
                 self._store_with_previews(feed, events)
         if fresh:
