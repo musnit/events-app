@@ -1,7 +1,7 @@
 // Shapes returned by the Python API (see events/catalog.py and events/web.py).
 
-export type Source = "luma" | "partiful" | "agihouse";
-export type Area = "bay" | "online" | "elsewhere" | "unknown";
+export type Source = "luma" | "partiful" | "agihouse" | "research";
+export type Area = "bay" | "mumbai" | "online" | "elsewhere" | "unknown";
 
 export interface Location {
   type: "offline" | "online" | "unknown";
@@ -72,6 +72,9 @@ export interface EventItem {
   muted: boolean;
   /** Added by its own link, so the area filter leaves it in. */
   linked: boolean;
+  research?: ResearchEntry;
+  research_entries?: ResearchEntry[];
+  collection_ids?: string[];
 }
 
 export interface CalendarItem {
@@ -106,6 +109,7 @@ export interface Taxonomy {
 export interface EventsPayload {
   version: string;
   generated_at: string;
+  research_collections?: ResearchCollection[];
   events: EventItem[];
   calendars: CalendarItem[];
   taxonomy: Taxonomy;
@@ -162,11 +166,54 @@ export interface Status {
   prefs: { muted_calendars?: string[]; area?: AreaChoice };
 }
 
-export type AreaChoice = "bay" | "bay-online" | "all";
+export type AreaChoice = "bay" | "bay-online" | "mumbai" | "all";
 
 export interface LinkedEvent {
   id: string;
   name: string | null;
   url: string;
   last_error: string | null;
+}
+
+
+export type ResearchKind = "talk" | "side-event" | "music-art" | "local-scene" | "place";
+export type ResearchPriority = "essential" | "recommended" | "alternative" | "watchlist" | "skip" | "reference";
+export interface ResearchEntry {
+  event_id?: string | null;
+  starred?: boolean;
+  hidden?: boolean;
+  local_date?: string | null;
+  id: string;
+  title: string;
+  kind: ResearchKind;
+  priority: ResearchPriority;
+  verdict: string;
+  summary: string;
+  start_at: string | null;
+  end_at: string | null;
+  date_label: string;
+  schedule_status: "confirmed" | "approximate" | "unverified" | "unscheduled" | "stale";
+  timezone: string;
+  venue: string | null;
+  address: string | null;
+  city: string;
+  country: string;
+  url: string | null;
+  access: string;
+  people: { name: string; role: string; assessment: string }[];
+  sections: { title: string; body: string }[];
+  sources: { label: string; url: string }[];
+  tags: string[];
+  conflicts: string[];
+}
+export interface ResearchCollection {
+  id: string;
+  title: string;
+  city: string;
+  timezone: string;
+  checked_at: string;
+  intro: string;
+  notes: { title: string; body: string }[];
+  itinerary: { date: string; body: string }[];
+  entries: ResearchEntry[];
 }

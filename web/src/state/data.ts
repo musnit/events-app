@@ -3,7 +3,7 @@
 
 import { useSyncExternalStore } from "react";
 import { api, ApiError, fetchEvents, fetchStatus, Offline, SessionExpired } from "../lib/api.ts";
-import type { AreaChoice, CalendarItem, Category, EventItem, EventsPayload, Status } from "../lib/types.ts";
+import type { AreaChoice, CalendarItem, Category, EventItem, EventsPayload, ResearchCollection, Status } from "../lib/types.ts";
 import { startVisit, touchVisit } from "../lib/visits.ts";
 import { toast } from "./toasts.ts";
 
@@ -19,6 +19,7 @@ export interface Catalog {
   sizes: { id: string; label: string; hint: string }[];
   zones: { id: string; label: string }[];
   generatedAt: string;
+  researchCollections: ResearchCollection[];
 }
 
 export interface DataState {
@@ -53,6 +54,7 @@ function buildCatalog(payload: EventsPayload): Catalog {
     sizes: payload.taxonomy.sizes,
     zones: payload.zones,
     generatedAt: payload.generated_at,
+    researchCollections: payload.research_collections ?? [],
   };
 }
 

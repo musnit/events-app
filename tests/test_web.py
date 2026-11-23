@@ -244,6 +244,47 @@ class PrefsTest(WebTestCase):
         self.assertEqual(self.json_of(self.call("PUT", "/api/prefs", {})), expected)
         self.assertEqual(self.json_of(self.call("PUT", "/api/prefs", {"muted_calendars": []}))["muted_calendars"], [])
 
+    def test_mumbai_area_preference(self):
+        response = self.call("PUT", "/api/prefs", {"area": "mumbai"})
+        self.assertEqual(response.status, 200)
+        self.assertEqual(self.json_of(response), {"area": "mumbai"})
+
+    def test_research_marks_follow_source_alias_and_can_be_cleared(self):
+        from .test_research import collection
+
+        self.store.import_research(collection())
+        self.call("PUT", "/api/events/fixture-research-talk/mark", {"starred": True})
+        self.add_events(listing("evt-source", url="https://luma.com/fixture-science"))
+        response = self.call("PUT", "/api/events/evt-source/mark", {"starred": False})
+        self.assertEqual(response.status, 200)
+        self.assertFalse(self.catalog.build()["events"][0]["starred"])
+        self.call("PUT", "/api/events/evt-source/mark", {"starred": True})
+        self.assertTrue(self.store.marks()["fixture-research-talk"]["starred"])
+        self.assertTrue(self.store.marks()["evt-source"]["starred"])
+
+    def test_research_export_uses_editorial_schedule_when_upstream_differs(self):
+        from .test_research import collection, entry
+
+        self.store.import_research(collection())
+        self.add_events(listing("evt-source", url=entry()["url"], start=iso(25), end=iso(27)))
+        editorial = self.call("GET", "/api/research/fixture-research-talk/ics")
+        upstream = self.call("GET", "/api/events/evt-source/ics")
+        self.assertEqual(editorial.status, 200)
+        self.assertIn("DTSTART:20260930T120000Z", editorial.body.decode())
+        self.assertIn("DTSTART:20260930T130000Z", upstream.body.decode())
+        self.assertEqual(self.call("GET", "/api/research/missing/ics").status, 404)
+
+    def test_research_exports_reject_approximate_missing_end_and_rejected_entries(self):
+        from .test_research import collection, entry
+
+        for change in ({"schedule_status": "approximate"}, {"end_at": None}, {"priority": "skip"}):
+            with self.subTest(change=change):
+                self.store.import_research(collection(entry(**change)))
+                self.assertEqual(self.call("GET", "/api/research/fixture-research-talk/ics").status, 400)
+                self.assertNotIn("fixture-research-talk@", self.call("GET", "/feed.ics", query={"scope": ["all"]}).body.decode())
+        self.store.import_research(collection(entry(schedule_status="approximate")))
+        self.assertEqual(self.call("GET", "/api/events/fixture-research-talk/ics").status, 400)
+
     def test_invalid_prefs(self):
         cases = [({"muted_calendars": "cal-a"}, "muted_calendars must be a list"),
                  ({"muted_calendars": [1]}, "muted_calendars must be a list"),

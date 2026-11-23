@@ -4,13 +4,14 @@ import { Link } from "../components/Link.tsx";
 import { Page } from "../components/Page.tsx";
 import { agendaIncludes } from "../lib/agenda.ts";
 import { addDays, dayKey, parseDayKey, startOfDay, weekendStart, type DayKey } from "../lib/dates.ts";
+import { areaToday } from "../lib/event-time.ts";
 import { filtersToParams } from "../lib/filters.ts";
 import { fmtDayLong, fmtDayShort } from "../lib/format.ts";
 import { href } from "../lib/routes.ts";
 import type { EventItem } from "../lib/types.ts";
 import { useData } from "../state/data.ts";
 import { useView } from "../state/view.ts";
-import { useFilteredEvents, useNow } from "../state/hooks.ts";
+import { useArea, useFilteredEvents, useNow } from "../state/hooks.ts";
 import { navigate } from "../state/router.ts";
 import { LoadingCards, NoEvents } from "./common.tsx";
 
@@ -37,7 +38,8 @@ export function AgendaView({ from }: { from: DayKey | null }) {
     [from, now],
   );
   const { events, counts } = useFilteredEvents(filters, { scope });
-  const today = startOfDay(new Date(now));
+  const preferredArea = useArea();
+  const today = startOfDay(areaToday(filters.area ?? preferredArea, now));
   const weekend = weekendStart(today);
   const nextWeek = dayKey(addDays(today, (8 - today.getDay()) % 7 || 7));
   const jumps = [

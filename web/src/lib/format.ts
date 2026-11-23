@@ -1,4 +1,5 @@
 import { addDays, dayKey, daysBetween, parseDayKey, startOfDay } from "./dates.ts";
+import { eventDayOf, eventTimeZone, type EventClock } from "./event-time.ts";
 import type { EventItem, Source, Ticket } from "./types.ts";
 
 const timeWithMinutes = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
@@ -11,13 +12,21 @@ const monthYear = new Intl.DateTimeFormat(undefined, { month: "long", year: "num
 const monthShort = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 export const LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-export function fmtTime(iso: string): string {
+export function fmtTime(iso: string, timeZone?: string): string {
   const d = new Date(iso);
+  if (timeZone) return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZone }).format(d);
   return (d.getMinutes() === 0 ? timeOnTheHour : timeWithMinutes).format(d);
 }
 
-export function fmtTimeRange(ev: Pick<EventItem, "start_at" | "end_at" | "all_day">): string {
+export function fmtTimeRange(ev: Pick<EventItem, "start_at" | "end_at" | "all_day"> & EventClock): string {
   if (ev.all_day) return "All day";
+  const timeZone = eventTimeZone(ev);
+  if (timeZone) {
+    const start = fmtTime(ev.start_at, timeZone);
+    if (!ev.end_at) return `${start} IST`;
+    const date = eventDayOf(ev) === eventDayOf(ev, ev.end_at) ? "" : `${new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone }).format(new Date(ev.end_at))}, `;
+    return `${start} – ${date}${fmtTime(ev.end_at, timeZone)} IST`;
+  }
   const start = fmtTime(ev.start_at);
   if (!ev.end_at) return start;
   const end = new Date(ev.end_at);
@@ -52,8 +61,8 @@ export function relativeDay(key: string, today = new Date()): string {
 }
 
 /** When an event happens in another time zone, its local wall-clock time, e.g. "7:00 PM EDT". */
-export function eventZoneNote(ev: Pick<EventItem, "start_at" | "timezone" | "all_day">): string | null {
-  if (ev.all_day || !ev.timezone || ev.timezone === LOCAL_TZ) return null;
+export function eventZoneNote(ev: Pick<EventItem, "start_at" | "timezone" | "all_day"> & EventClock): string | null {
+  if (eventTimeZone(ev) || ev.all_day || !ev.timezone || ev.timezone === LOCAL_TZ) return null;
   try {
     const d = new Date(ev.start_at);
     const theirs = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZone: ev.timezone, timeZoneName: "short" }).format(d);
@@ -76,7 +85,7 @@ export function fmtPrice(ticket: Ticket | null): string | null {
   return money(ticket.price_cents);
 }
 
-export const SOURCE_LABEL: Record<Source, string> = { luma: "Luma", partiful: "Partiful", agihouse: "AGI House" };
+export const SOURCE_LABEL: Record<Source, string> = { luma: "Luma", partiful: "Partiful", agihouse: "AGI House", research: "Research" };
 
 export function goingLabel(status: string | null): string {
   switch (status) {
@@ -116,7 +125,7 @@ export function mapsUrl(ev: EventItem): string | null {
 }
 
 /** A Google Calendar "add event" link, which works from any browser without signing in here. */
-export function googleCalendarUrl(ev: EventItem): string {
+export function googleCalendarUrl<T extends Pick<EventItem, "name" | "url" | "start_at" | "end_at" | "all_day"> & { location: Pick<EventItem["location"], "type" | "venue" | "address" | "city"> }>(ev: T): string {
   const stamp = (iso: string) => new Date(iso).toISOString().replace(/[-:]|\.\d{3}/g, "");
   let dates: string;
   if (ev.all_day) {

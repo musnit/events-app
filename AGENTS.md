@@ -12,7 +12,8 @@ README.md is the user-facing documentation; this file is for working on the code
   - `config.py` `EVENTS_*` settings (table in README.md) · `db.py` SQLite + numbered migrations · `store.py` all SQL
   - `sources/` one client per upstream (`luma.py`, `partiful.py`, `agihouse.py`) → listing dicts (shape in `sources/__init__.py`)
   - `sync.py` background workers · `catalog.py` merges listings into the event list · `categorize.py` vibes/topics
-  - `areas.py` Bay Area zones · `ics.py` iCalendar read/write · `web.py` HTTP/API/static · `legacy.py` v1 import
+  - `areas.py` Bay Area zones / Mumbai classification · `ics.py` iCalendar read/write · `web.py` HTTP/API/static · `legacy.py` v1 import
+  - `research.py` validates and imports persistent editorial research collections, separately from upstream listings
 - `web/` — frontend: React 19 + TypeScript + Vite, plain CSS, no router or UI libraries.
   - `src/lib/` pure logic (routes, filters, dates, formatting, API client, bookmarklets, PWA)
   - `src/state/` data store (polling), router, toasts · `src/components/` · `src/views/` one file per screen
@@ -38,6 +39,7 @@ EVENTS_SYNC=0 EVENTS_STATE_DIR=data python3 server.py   # serve without backgrou
 npm --prefix web run dev                         # Vite dev server on 127.0.0.1:5173, proxies /api to $EVENTS_API or :8771
 BROWSER_BIN=… BASE_URL=http://127.0.0.1:8771/ npm --prefix web run check:ui   # screenshots in /tmp/events-ui
 python3 -m events.categorize data/events.db [vibes|topics]                    # categorization coverage report
+python3 -m events.research import data/research-imports/collection.json --state-dir data # private editorial data
 ```
 
 After changing `web/package-lock.json`, update `npmDepsHash` in `package.nix`: set it to `lib.fakeHash`,
@@ -64,6 +66,12 @@ font: point `FONTCONFIG_FILE` at a config that adds Noto Color Emoji, or chips s
   cross-source duplicates (same title ±3 h), applies RSVPs (`going`), marks (star/hide) and mutes.
 - `event_seen.announced_at` is set only for events that appear after a feed's first pull, which drives
   the "New since your last visit" badge (the client keeps the visit reference in localStorage).
+- **research collection**: durable, validated editorial JSON stored in `research_collections` (migration 3).
+  The CLI atomically upserts by collection ID. Essential/recommended/alternative entries with
+  confirmed/approximate schedules become catalog events; other entries remain collection-only.
+  Optional `local_date` supports date filtering without invented times. Exact canonical URLs attach notes to existing
+  source events without fuzzy-merging talks. Give distinct subsessions distinct URLs. Research/source
+  mark aliases stay consistent. Entries survive sync and pruning; keep real imports in ignored `data/`.
 
 ## Sync
 
@@ -108,7 +116,11 @@ Room holds ("HOLD – …", "Private Event", "[Hold]") are dropped. Bump `RULES_
 ## Web app
 
 Every screen is a URL (`web/src/lib/routes.ts`): `/`, `/agenda/2026-10-03`, `/day/2026-10-03`,
-`/month/2026-10`, `/event/<id>`, `/saved`, `/calendars`, `/calendars/<id>`, `/sources[/luma|partiful|…]`.
+`/month/2026-10`, `/event/<id>`, `/saved`, `/calendars`, `/calendars/<id>`, `/sources[/luma|partiful|…]`,
+`/mumbai`, `/research/<id>`. Mumbai's research filters live in `?view=all&date=2026-11-03&kind=talk&priority=essential&q=…`.
+The Mumbai collection and research detail dates always use `Asia/Kolkata`. Its strict area filter
+does not bypass location checks for linked SF events. Uncertain research times have textual labels
+and no calendar export controls.
 Filters live in the query (`?vibe=party,social&topic=ai&time=evening&weekend=1&zone=sf&q=…`). An event opened
 from a list is drawn over it (history state `background`); opened directly it is a page. The server returns
 index.html for extensionless paths and rewrites `<base href>` from `X-Forwarded-Prefix`, so the app also
@@ -119,7 +131,7 @@ and private data), it only shows an offline page.
 
 `GET /api/events` (catalog; ETag/304, gzip) · `GET /api/status` (sources, workers, feeds, prefs) ·
 `POST /api/sync {source?}` · `PUT /api/prefs {muted_calendars?, area?}` · `PUT /api/events/<id>/mark {starred?, hidden?}` ·
-`GET /api/events/<id>/ics` · `GET /feed.ics?scope=mine|all` ·
+`GET /api/events/<id>/ics` · `GET /api/research/<id>/ics` (confirmed editorial schedule) · `GET /feed.ics?scope=mine|all` ·
 `POST /api/luma/import {payload}` · `POST /api/luma/links {text}` (calendars and events) · `DELETE /api/luma/calendars/<id>` ·
 `DELETE /api/luma/events/<id>` ·
 `PUT|DELETE /api/luma/session` · `PUT|DELETE /api/luma/ics` · `POST /api/partiful/import {payload}` ·

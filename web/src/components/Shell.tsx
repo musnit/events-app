@@ -19,6 +19,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { label: "Upcoming", icon: "list", route: { name: "agenda", from: null }, match: ["agenda", "day"], phone: true },
   { label: "Month", icon: "grid", route: { name: "month", month: "" }, match: ["month"], phone: true },
+  { label: "Mumbai", icon: "pin", route: { name: "mumbai" }, match: ["mumbai", "research"], phone: true },
   { label: "Saved", icon: "star", route: { name: "saved" }, match: ["saved"], phone: true },
   { label: "Calendars", icon: "calendars", route: { name: "calendars" }, match: ["calendars", "calendar"], phone: false },
   { label: "Sources", icon: "settings", route: { name: "sources", section: null }, match: ["sources"], phone: true },

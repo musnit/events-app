@@ -117,6 +117,14 @@ MIGRATIONS: list[str] = [
         added_at REAL NOT NULL
     );
     """,
+    # 3: editorial research survives feed replacement and history pruning
+    """
+    CREATE TABLE research_collections (
+        id TEXT PRIMARY KEY,
+        data TEXT NOT NULL,
+        updated_at REAL NOT NULL
+    );
+    """,
 ]
 
 

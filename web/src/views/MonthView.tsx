@@ -4,33 +4,36 @@ import { Icon } from "../components/Icon.tsx";
 import { Link } from "../components/Link.tsx";
 import { MonthGrid } from "../components/MonthGrid.tsx";
 import { Page } from "../components/Page.tsx";
-import { addDays, addMonths, monthGrid, monthKey, parseMonthKey } from "../lib/dates.ts";
+import { addDays, addMonths, dayKey, monthGrid, monthKey, parseMonthKey } from "../lib/dates.ts";
+import { areaToday, eventDayOf } from "../lib/event-time.ts";
 import { filtersToParams } from "../lib/filters.ts";
 import { fmtMonth } from "../lib/format.ts";
 import { href } from "../lib/routes.ts";
 import type { EventItem } from "../lib/types.ts";
 import { useView } from "../state/view.ts";
-import { useFilteredEvents, useMediaQuery, useNow } from "../state/hooks.ts";
+import { useArea, useFilteredEvents, useMediaQuery, useNow } from "../state/hooks.ts";
 import { hasEnded } from "../lib/format.ts";
 
 export function MonthView({ month }: { month: string }) {
   const { route, filters } = useView();
   const first = parseMonthKey(month)!;
   const grid = monthGrid(first);
-  const from = grid[0].getTime();
-  const to = addDays(grid[grid.length - 1], 1).getTime();
+  const from = dayKey(grid[0]);
+  const to = dayKey(addDays(grid[grid.length - 1], 1));
   const scope = useCallback((ev: EventItem) => {
-    const t = Date.parse(ev.start_at);
+    const t = eventDayOf(ev);
     return t >= from && t < to;
   }, [from, to]);
   const { events, counts } = useFilteredEvents(filters, { scope });
-  const inMonth = events.filter((ev) => new Date(ev.start_at).getMonth() === first.getMonth()).length;
-  const thisMonth = monthKey(new Date());
+  const inMonth = events.filter((ev) => eventDayOf(ev).slice(0, 7) === month).length;
+  const preferredArea = useArea();
+  const today = areaToday(filters.area ?? preferredArea);
+  const thisMonth = monthKey(today);
   // Phones show dots in the grid, so the month's events are listed underneath it.
   const narrow = useMediaQuery("(max-width: 719px)");
   const now = useNow();
   const listed = useMemo(
-    () => (narrow ? events.filter((ev) => new Date(ev.start_at).getMonth() === first.getMonth() && !hasEnded(ev, now)) : []),
+    () => (narrow ? events.filter((ev) => eventDayOf(ev).slice(0, 7) === month && !hasEnded(ev, now)) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [narrow, events, month, now],
   );
@@ -53,7 +56,7 @@ export function MonthView({ month }: { month: string }) {
         </div>
       }
     >
-      <MonthGrid month={first} events={events} filtersQuery={filtersToParams(filters).toString()} />
+      <MonthGrid today={dayKey(today)} month={first} events={events} filtersQuery={filtersToParams(filters).toString()} />
       {narrow && listed.length > 0 && (
         <div className="month-list">
           <EventList events={listed} resetKey={`${month}|${filtersToParams(filters)}`} empty={null} />

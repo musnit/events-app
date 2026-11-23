@@ -62,7 +62,7 @@ export function FilterPanel({ route, filters, counts, showVibes = true }: { rout
 
   function chooseArea(choice: AreaChoice) {
     // Picking an area saves it as the default, so it sticks on every device and view.
-    if (filters.area) set({ area: null });
+    if (filters.area || filters.zones.length) set({ area: null, zones: [] });
     void data.setArea(choice);
   }
 
@@ -96,7 +96,7 @@ export function FilterPanel({ route, filters, counts, showVibes = true }: { rout
               onClick={() => chooseArea(a.id)}>{a.label}</button>
           ))}
         </div>
-        {area !== "all" && catalog.zones.map((z) => (
+        {area !== "all" && area !== "mumbai" && catalog.zones.map((z) => (
           <Chip key={z.id} on={filters.zones.includes(z.id)} count={counts.zones[z.id] ?? 0}
             onClick={() => set({ zones: toggle(filters.zones, z.id) })}>{z.label}</Chip>
         ))}

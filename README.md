@@ -13,6 +13,20 @@ marked. Every view, date and filter has its own URL: `/`,
 `/calendars`, `/sources` and `?vibe=party&topic=ai&time=evening`. It
 installs on a phone as an app.
 
+The **Mumbai** tab at `/mumbai` holds the Devcon research collection. Browse the
+shortlist, all research, watchlist, skipped candidates, or local places, and filter
+by date, type and priority. Search includes the speaker assessments and full notes.
+Each entry has its own `/research/<id>` page with the recommendation, people,
+sources, access details and scheduling caveats. Dates and times in this collection
+use Mumbai time (IST), wherever you open the app. The ordinary event filters also
+offer a strict **Mumbai** area that excludes events from other cities.
+
+Research is stored separately from calendar feeds, so a source refresh cannot
+overwrite the notes. Entries with uncertain or missing dates remain in the research
+collection. Only shortlist entries with confirmed or approximate schedules enter
+the calendar. Watchlist, skipped and reference entries stay in the research view;
+exports from research pages require a confirmed start and end.
+
 ## Connect your calendars
 
 Luma's public API covers only calendars you manage, and Partiful has no
@@ -35,7 +49,8 @@ on the **Sources** page:
   **Add calendars or events by link**. An event link adds just that event,
   private ones included: Luma lists only public events on a calendar, so a
   private event otherwise reaches the app only through your own
-  registrations. An event added by link shows whichever area you choose.
+  registrations. An event added by link shows whichever area you choose, except
+  the strict Mumbai filter.
 
 The deployment can also name calendars that are always followed
 (`EVENTS_LUMA_CALENDARS`, or `services.events.lumaCalendars` in the NixOS
@@ -85,7 +100,33 @@ against it, or restore the directory from a backup.
 - Luma's email-code sign-in is behind a bot check, so the app cannot sign
   in to Luma itself. It uses the bookmarklet, a pasted cookie or the
   iCal link.
-- Past events are kept for 60 days, then pruned.
+- Past calendar events are kept for 60 days, then pruned. Research collections
+  retain their notes and historical entries.
+
+## Import research
+
+Keep personal research files in the gitignored `data/` directory. Import a
+collection into the same state directory the server uses:
+
+```sh
+python3 -m events.research import data/research-imports/collection.json --state-dir data
+```
+
+The importer validates the whole file before writing and updates collections by
+stable ID. Reimporting the same file is safe and leaves connections, preferences,
+stars and unrelated collections intact. The file can contain one collection, an
+array, or an object with a `research_collections` array. A collection contains
+`id`, `title`, `city`, `timezone`, `checked_at`, `intro`, `notes`, `itinerary` and
+`entries`; `events/research.py` defines the validated entry fields. Use timezone-aware
+timestamps, and null timestamps for unscheduled places or leads. An optional
+`local_date` (`YYYY-MM-DD`) makes known days filterable without inventing a time.
+Give distinct sessions
+distinct URLs, even when they share a parent conference.
+
+If a researched event already exists in a feed under the same canonical URL, the
+app attaches the notes to it and preserves its source details and RSVP. Research
+imports are local editorial updates; syncing calendar sources does not recheck
+the research claims or schedules.
 
 ## Configuration
 

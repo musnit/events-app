@@ -80,6 +80,39 @@ class Store:
 
     # ---------- secrets ----------
 
+    def research_collections(self) -> list[dict]:
+        """Research is independent of synced listings and contains no account credentials."""
+        return [json.loads(row["data"]) for row in
+                self.db.query("SELECT data FROM research_collections ORDER BY id")]
+
+    def import_research(self, payload: object) -> dict:
+        """Atomically replace the named collections, retaining all other collections and marks."""
+        from .research import validate_collections
+
+        collections = validate_collections(payload)
+        incoming = {collection["id"] for collection in collections}
+        changed = 0
+        with self.db.transaction() as conn:
+            existing = self.research_collections()
+            ids = {entry["id"] for collection in existing if collection["id"] not in incoming
+                   for entry in collection["entries"]}
+            for collection in collections:
+                for entry in collection["entries"]:
+                    if entry["id"] in ids:
+                        raise ValueError(f"research entry id already belongs to another collection: {entry['id']}")
+                    ids.add(entry["id"])
+            for collection in collections:
+                data = json.dumps(collection, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+                changed += conn.execute(
+                    "INSERT INTO research_collections (id, data, updated_at) VALUES (?, ?, ?) "
+                    "ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at "
+                    "WHERE research_collections.data != excluded.data",
+                    (collection["id"], data, self.clock())).rowcount
+            if changed:
+                self._bump(conn)
+        return {"collections": len(collections), "entries": sum(len(c["entries"]) for c in collections),
+                "changed": changed}
+
     def get_secret(self, key: str) -> dict | None:
         row = self.db.query_one("SELECT value FROM secrets WHERE key = ?", (key,))
         if not row:

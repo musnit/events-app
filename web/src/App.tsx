@@ -15,6 +15,7 @@ import { AgendaView } from "./views/AgendaView.tsx";
 import { CalendarsView, CalendarView } from "./views/CalendarsView.tsx";
 import { DayView } from "./views/DayView.tsx";
 import { EventPage, EventSheet } from "./views/EventView.tsx";
+import { MumbaiView, ResearchPage } from "./views/MumbaiView.tsx";
 import { MonthView } from "./views/MonthView.tsx";
 import { NotFoundView } from "./views/NotFoundView.tsx";
 import { SavedView } from "./views/SavedView.tsx";
@@ -26,6 +27,8 @@ function View({ route, pwa }: { route: Route; pwa: PwaController }) {
     case "day": return <DayView date={route.date} />;
     case "month": return <MonthView month={route.month || monthKey(new Date())} />;
     case "event": return <EventPage id={route.id} />;
+    case "mumbai": return <MumbaiView />;
+    case "research": return <ResearchPage id={route.id} />;
     case "saved": return <SavedView />;
     case "calendars": return <CalendarsView />;
     case "calendar": return <CalendarView id={route.id} />;
@@ -71,7 +74,7 @@ export function App({ pwa }: { pwa: PwaController }) {
       const target = event.target as HTMLElement | null;
       const typing = target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
       if (event.key !== "/" || typing || event.metaKey || event.ctrlKey || event.altKey) return;
-      const search = document.querySelector<HTMLInputElement>(".page-header .search input");
+      const search = document.querySelector<HTMLInputElement>(".page-header .search input, .research-search input");
       if (search) {
         event.preventDefault();
         search.focus();

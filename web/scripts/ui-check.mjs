@@ -33,7 +33,8 @@ async function firstIds() {
   const data = await res.json();
   const upcoming = data.events.find((e) => Date.parse(e.start_at) > Date.now() && e.area === "bay" && e.cover_url) ?? data.events[0];
   const calendar = [...data.calendars].sort((a, b) => b.upcoming_count - a.upcoming_count)[0];
-  return { event: upcoming?.id, calendar: calendar?.id };
+  const research = data.research_collections?.find((c) => c.id === "mumbai-devcon-2026")?.entries[0];
+  return { event: upcoming?.id, calendar: calendar?.id, research: research?.id };
 }
 
 async function audit(page) {
@@ -77,6 +78,11 @@ const PAGES = [
   ["sources", "sources"],
   ["sources-luma", "sources/luma"],
   ["event", `event/${ids.event}`],
+  ["mumbai", "mumbai"],
+  ["mumbai-all", "mumbai?view=all"],
+  ["mumbai-watchlist", "mumbai?view=watchlist"],
+  ["mumbai-empty", "mumbai?q=fixture-no-results-92841"],
+  ...(ids.research ? [["research", `research/${ids.research}`]] : []),
   ["not-found", "nope/at/all"],
 ];
 const only = process.env.ONLY?.split(",");
@@ -100,7 +106,7 @@ for (const [vpName, options] of Object.entries(VIEWPORTS)) {
     page.on("pageerror", (err) => errors.push(String(err)));
     for (const [name, path] of PAGES) {
       if (pageFilter && !pageFilter.includes(name)) continue;
-      if (scheme === "dark" && !["upcoming", "month", "event", "sources"].includes(name)) continue;
+      if (scheme === "dark" && !["upcoming", "month", "event", "sources", "mumbai", "research"].includes(name)) continue;
       errors.length = 0;
       await page.goto(new URL(path, BASE).toString(), { waitUntil: "networkidle" });
       await page.waitForTimeout(300);

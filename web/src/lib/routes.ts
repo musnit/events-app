@@ -19,6 +19,8 @@ export type Route =
   | { name: "day"; date: DayKey }
   | { name: "month"; month: string }
   | { name: "event"; id: string }
+  | { name: "mumbai" }
+  | { name: "research"; id: string }
   | { name: "saved" }
   | { name: "calendars" }
   | { name: "calendar"; id: string }
@@ -53,6 +55,10 @@ export function parseRoute(path: string): Route {
       return arg && parseMonthKey(arg) ? { name: "month", month: arg } : notFound;
     case "event":
       return arg && SAFE_ID.test(arg) ? { name: "event", id: arg } : notFound;
+    case "mumbai":
+      return arg ? notFound : { name: "mumbai" };
+    case "research":
+      return arg && /^[A-Za-z0-9_.:-]{1,240}$/.test(arg) ? { name: "research", id: arg } : notFound;
     case "saved":
       return arg ? notFound : { name: "saved" };
     case "calendars":
@@ -72,6 +78,8 @@ export function routePath(route: Route): string {
     case "day": return `day/${route.date}`;
     case "month": return `month/${route.month}`;
     case "event": return `event/${encodeURIComponent(route.id)}`;
+    case "mumbai": return "mumbai";
+    case "research": return `research/${encodeURIComponent(route.id)}`;
     case "saved": return "saved";
     case "calendars": return "calendars";
     case "calendar": return `calendars/${encodeURIComponent(route.id)}`;

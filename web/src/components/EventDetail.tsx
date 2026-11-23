@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { apiUrl } from "../lib/api.ts";
-import { localDayOf, parseDayKey } from "../lib/dates.ts";
+import { parseDayKey } from "../lib/dates.ts";
+import { eventDayOf } from "../lib/event-time.ts";
 import { EMPTY_FILTERS, isNew } from "../lib/filters.ts";
 import {
   eventZoneNote, fmtDayLong, fmtPrice, fmtTimeRange, goingLabel, googleCalendarUrl, hasEnded, isHappeningNow, mapsUrl, SOURCE_LABEL,
@@ -10,6 +11,7 @@ import { href } from "../lib/routes.ts";
 import type { EventItem } from "../lib/types.ts";
 import { data, useData } from "../state/data.ts";
 import { toast } from "../state/toasts.ts";
+import { ResearchDetail } from "./ResearchDetail.tsx";
 import { Avatar } from "./Avatar.tsx";
 import { Icon } from "./Icon.tsx";
 import { Link } from "./Link.tsx";
@@ -38,6 +40,10 @@ async function share(ev: EventItem): Promise<void> {
 }
 
 export function EventDetail({ ev }: { ev: EventItem }) {
+  return ev.research ? <ResearchDetail entry={ev.research} event={ev} /> : <StandardEventDetail ev={ev} />;
+}
+
+function StandardEventDetail({ ev }: { ev: EventItem }) {
   const { catalog, newSince } = useData();
   const [imageBroken, setImageBroken] = useState(false);
   const calendars = ev.calendar_ids.map((id) => catalog?.calendarsById.get(id)).filter((c) => !!c);
@@ -45,7 +51,7 @@ export function EventDetail({ ev }: { ev: EventItem }) {
   const vibes = ev.vibes.map((id) => catalog?.vibeById.get(id)).filter((c) => !!c);
   const topics = ev.topics.map((id) => catalog?.topicById.get(id)).filter((c) => !!c);
   const zone = catalog?.zones.find((z) => z.id === ev.zone)?.label;
-  const date = parseDayKey(localDayOf(ev.start_at));
+  const date = parseDayKey(eventDayOf(ev));
   const price = fmtPrice(ev.ticket);
   const zoneNote = eventZoneNote(ev);
   const maps = mapsUrl(ev);
@@ -91,7 +97,7 @@ export function EventDetail({ ev }: { ev: EventItem }) {
         <div>
           <dt><Icon name="clock" /><span className="sr-only">When</span></dt>
           <dd>
-            <Link to={href({ name: "day", date: localDayOf(ev.start_at) })}>{date ? fmtDayLong(date) : ""}</Link>
+            <Link to={href({ name: "day", date: eventDayOf(ev) }, { ...EMPTY_FILTERS, area: ev.area === "mumbai" ? "mumbai" : null })}>{date ? fmtDayLong(date) : ""}</Link>
             <div>{fmtTimeRange(ev)}{zoneNote && <span className="muted"> · {zoneNote} there</span>}</div>
             <div className="fact-links">
               <a href={googleCalendarUrl(ev)} target="_blank" rel="noopener noreferrer">Add to Google Calendar</a>

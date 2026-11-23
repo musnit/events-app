@@ -24,6 +24,7 @@ from pathlib import Path
 from . import __version__, ics
 from .catalog import Catalog
 from .config import Settings
+from .research import can_export, event_from_entry
 from .sources import luma as luma_src
 from .sources import partiful as partiful_src
 from .store import Store
@@ -43,7 +44,7 @@ SECURITY_HEADERS = {
 CSP = ("default-src 'self'; img-src 'self' https: data:; style-src 'self'; script-src 'self'; connect-src 'self'; "
        "manifest-src 'self'; worker-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; "
        "form-action 'self'; frame-ancestors 'none'")
-AREAS = ("bay", "bay-online", "all")
+AREAS = ("bay", "bay-online", "all", "mumbai")
 
 
 class ApiError(Exception):
@@ -136,6 +137,7 @@ class App:
         r("GET", "/api/health", self.health)
         r("GET", "/api/events", self.events)
         r("GET", "/api/events/{event_id}/ics", self.event_ics)
+        r("GET", "/api/research/{entry_id}/ics", self.research_ics)
         r("PUT", "/api/events/{event_id}/mark", self.mark_event)
         r("GET", "/api/status", self.status)
         r("POST", "/api/sync", self.refresh)
@@ -219,6 +221,21 @@ class App:
 
     def event_ics(self, req: Request) -> Response:
         ev = self._event(req.params["event_id"])
+        if ev.get("source") == "research" and not can_export(ev["research"]):
+            raise ApiError(400, "research calendar export requires a confirmed start and end time")
+        return self._ics_response(ev)
+
+    def research_ics(self, req: Request) -> Response:
+        for collection in self.store.research_collections():
+            for entry in collection["entries"]:
+                if entry["id"] != req.params["entry_id"]:
+                    continue
+                if not can_export(entry):
+                    raise ApiError(400, "research calendar export requires a recommended entry with confirmed start and end times")
+                return self._ics_response(event_from_entry(entry, collection))
+        raise ApiError(404, "no such research entry")
+
+    def _ics_response(self, ev: dict) -> Response:
         body = ics.build([ev], name=ev["name"], now_iso=to_iso(self.store.clock())).encode("utf-8", "replace")
         safe = re.sub(r"[^A-Za-z0-9_-]+", "-", ev["name"]).strip("-")[:60] or "event"
         return Response(200, body, "text/calendar; charset=utf-8",
@@ -233,7 +250,20 @@ class App:
             raise ApiError(400, "starred and hidden must be true or false")
         if starred is None and hidden is None:
             raise ApiError(400, "nothing to change")
-        return json_response(self.store.set_mark(req.params["event_id"], starred=starred, hidden=hidden))
+        event_id = req.params["event_id"]
+        aliases = {event_id}
+        for event in self.catalog.build()["events"]:
+            entries = event.get("research_entries", [event["research"]] if event.get("research") else [])
+            ids = {event["id"], *(entry["id"] for entry in entries)}
+            if event_id in ids:
+                aliases.update(ids)
+                break
+        # Keep an explicit edit consistent across research/source aliases. A source may
+        # appear or disappear on the next pull; its researched event keeps the same mark.
+        with self.store.db.transaction():
+            for alias in sorted(aliases):
+                self.store.set_mark(alias, starred=starred, hidden=hidden)
+        return json_response(self.store.marks().get(event_id, {"starred": False, "hidden": False}))
 
     def feed_ics(self, req: Request) -> Response:
         scope = req.arg("scope", "mine")

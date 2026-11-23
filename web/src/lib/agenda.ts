@@ -1,9 +1,8 @@
-import { parseDayKey, type DayKey } from "./dates.ts";
+import { type DayKey } from "./dates.ts";
 import { hasEnded } from "./format.ts";
-import type { EventItem } from "./types.ts";
+import { eventDayOf, type EventClock } from "./event-time.ts";
 
 /** Today includes ongoing events; an explicit date also allows browsing ended events. */
-export function agendaIncludes(ev: Pick<EventItem, "start_at" | "end_at">, from: DayKey | null, now: number): boolean {
-  const chosen = from ? parseDayKey(from) : null;
-  return chosen ? Date.parse(ev.start_at) >= chosen.getTime() : !hasEnded(ev, now);
+export function agendaIncludes(ev: EventClock & { end_at: string | null }, from: DayKey | null, now: number): boolean {
+  return from ? eventDayOf(ev) >= from : !hasEnded(ev, now);
 }
