@@ -21,6 +21,8 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from . import net
+from . import preview as preview_mod
 from .config import Settings
 from .sources import agihouse as agihouse_src
 from .sources import luma as luma_src
@@ -34,6 +36,10 @@ log = logging.getLogger(__name__)
 USER, NEW, SCHEDULED = 0, 1, 2
 CONFIG_FEED = "luma:config"
 SUNDRY_FEED = "sundry"
+MEDIA_DIR = "media"
+# How many linked pages one pull reads at most; the rest wait for the next pull.
+PREVIEWS_PER_PULL = 150
+PREVIEW_SAVE_EVERY = 8
 CONFIG_NEVER_STALE = 10 * 365 * 86400
 RATE_LIMIT_PAUSES = (45, 90, 180, 300)
 IDLE_CHECK_S = 60
@@ -219,13 +225,15 @@ class Sync:
 
     def __init__(self, store: Store, settings: Settings, *, luma: luma_src.LumaClient | None = None,
                  partiful: partiful_src.PartifulClient | None = None, agihouse: agihouse_src.AgiHouseClient | None = None,
-                 sundry: sundry_src.SundryClient | None = None, clock: Callable[[], float] = time.time):
+                 sundry: sundry_src.SundryClient | None = None, previews: preview_mod.PreviewClient | None = None,
+                 clock: Callable[[], float] = time.time):
         self.store = store
         self.settings = settings
         self.luma = luma or luma_src.LumaClient()
         self.partiful = partiful or partiful_src.PartifulClient()
         self.agihouse = agihouse or agihouse_src.AgiHouseClient()
         self.sundry = sundry or sundry_src.SundryClient()
+        self.previews = previews or preview_mod.PreviewClient(settings.state_dir / MEDIA_DIR)
         self.clock = clock
         self._reconcile_lock = threading.Lock()
         intervals = {
@@ -278,6 +286,7 @@ class Sync:
                 if removed:
                     log.info("pruned %s old listings", removed)
                     self.reconcile()  # drops the feeds of events added by link that aged out
+                self.previews.prune(self.store.prune_previews(), self.clock() - 86400)
             except Exception:
                 log.exception("housekeeping failed")
 
@@ -583,4 +592,41 @@ class Sync:
         if pull.locked and upcoming < self.store.upcoming_count(feed.key):
             raise ValueError("Substack sent only the opening of “" + pull.locked[0] + "”, which is for subscribers; "
                              "keeping the events already indexed")
-        self.store.replace_listings(feed.key, pull.events)
+        self._store_with_previews(feed, pull.events)
+        self._read_previews(feed, pull.events, now)
+
+    def _store_with_previews(self, feed: Feed, events: list[dict]) -> None:
+        saved = self.store.previews(ev["url"] for ev in events)
+        self.store.replace_listings(feed.key, [preview_mod.apply(ev, saved.get(ev["url"])) for ev in events])
+
+    def _read_previews(self, feed: Feed, events: list[dict], now: str) -> None:
+        """Fetch the picture, organiser and words of each coming event's linked page, once per page.
+        The listings are stored again as these arrive, so the app fills in while the pull runs."""
+        yesterday = to_iso(self.store.clock() - 86400)
+        coming = [ev["url"] for ev in events if ev["start_at"] >= yesterday and ev["url"] != sundry_src.SITE]
+        due = self.store.previews_due(coming)[:PREVIEWS_PER_PULL]
+        blocked: set[str] = set()
+        fresh = 0
+        for url in due:
+            host = preview_mod.host_of(url)
+            if host in blocked:
+                continue
+            if self._stopping.wait(self.settings.preview_spacing):
+                break
+            try:
+                self.store.save_preview(url, self.previews.get(url))
+                fresh += 1
+            except preview_mod.PreviewError as e:
+                if e.blocked:
+                    # Leave this site's other pages untried, so the next pull starts on them afresh.
+                    log.warning("sundry: %s is turning requests away (%s); its pages wait for the next pull", host, e)
+                    blocked.add(host)
+                else:
+                    self.store.fail_preview(url, str(e))
+            except Exception as e:  # one odd page must not cost the others their pictures
+                log.warning("sundry: could not read %s: %s", net.redact(url), e)
+                self.store.fail_preview(url, str(e) or e.__class__.__name__)
+            if fresh and fresh % PREVIEW_SAVE_EVERY == 0:
+                self._store_with_previews(feed, events)
+        if fresh:
+            self._store_with_previews(feed, events)

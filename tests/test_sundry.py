@@ -5,11 +5,12 @@ from datetime import date
 
 from events import net
 from events.catalog import Catalog
+from events.preview import PreviewError
 from events.sources import sundry
 from events.sync import SUNDRY_FEED, Sync
 
-from .helpers import (FakeAgiHouse, FakeClock, FakeLuma, FakePartiful, FakeRequest, FakeSundry, make_settings, make_store, response,
-                      temp_dir)
+from .helpers import (DAY, FakeAgiHouse, FakeClock, FakeLuma, FakePartiful, FakePreviews, FakeRequest, FakeSundry, make_settings,
+                      make_store, response, temp_dir)
 
 PUBLISHED = date(2026, 9, 28)  # the tests' clock reads Tuesday 2026-09-29, 12:00 UTC
 
@@ -223,10 +224,11 @@ class SyncTest(unittest.TestCase):
         self.root = temp_dir(self)
         self.week = sundry.parse_post(WEEK, PUBLISHED)
         self.source = FakeSundry(self.week)
+        self.pages = FakePreviews()
 
     def sync(self, **env: str) -> Sync:
         return Sync(self.store, make_settings(self.root, **{"EVENTS_SUNDRY": "1", **env}), luma=FakeLuma(), partiful=FakePartiful(),
-                    agihouse=FakeAgiHouse(), sundry=self.source, clock=self.clock)
+                    agihouse=FakeAgiHouse(), sundry=self.source, previews=self.pages, clock=self.clock)
 
     def pull(self, sync: Sync) -> None:
         sync._run(self.store.feed(SUNDRY_FEED), 0)
@@ -274,3 +276,70 @@ class SyncTest(unittest.TestCase):
         settings = Settings.from_env({"EVENTS_STATE_DIR": str(self.root)})
         self.assertEqual((settings.sundry, settings.sundry_interval), (True, 6 * 3600))
         self.assertEqual(self.sync().intervals["sundry"], 6 * 3600)
+
+    def test_linked_pages_fill_in_pictures_organisers_and_words(self):
+        film, late = "https://www.quicket.co.za/events/100001-fixture-film/", "https://www.instagram.com/p/FixtureLate1/"
+        self.pages.pages = {
+            late: {"image": "media/" + "a" * 32 + ".jpg", "author": {"id": "instagram:fixture_basement", "name": "Fixture Basement",
+                                                                     "url": "https://www.instagram.com/fixture_basement/"},
+                   "text": "Doors at nine. #vinyl #latenight", "venue": None, "address": None, "tags": ["vinyl", "latenight"]},
+            film: {"image": None, "author": None, "text": None, "venue": "Fixture House", "address": "1 Example Road, Cape Town", "tags": []},
+        }
+        sync = self.sync()
+        sync.reconcile()
+        self.pull(sync)
+        self.assertEqual(sorted(self.pages.calls), sorted([film, late, "https://supper.fixture.test/", "https://www.instagram.com/p/FixtureRun01/"]),
+                         "an event without a link of its own has no page to read")
+        events = {e["name"]: e for e in Catalog(self.store, self.clock).build()["events"]}
+        session = events["Fixture Late Session"]
+        self.assertEqual(session["cover_url"], "media/" + "a" * 32 + ".jpg")
+        self.assertEqual((session["presenter"]["name"], session["presenter"]["url"]),
+                         ("Fixture Basement", "https://www.instagram.com/fixture_basement/"))
+        self.assertEqual(session["description"], "Cost: From R80\n\nDoors at nine. #vinyl #latenight")
+        self.assertEqual(session["tags"], ["vinyl", "latenight"])
+        self.assertEqual(events["Fixture Film Club: Made-Up Classic (1959)"]["location"]["address"], "1 Example Road, Cape Town")
+        self.assertIsNone(events["Fixture Makers Market"]["cover_url"])
+
+    def test_each_page_is_read_once_and_a_failure_waits_before_another_try(self):
+        late = "https://www.instagram.com/p/FixtureLate1/"
+        self.pages.pages = {late: {"image": None, "author": None, "text": "Words", "venue": None, "address": None, "tags": []}}
+        sync = self.sync()
+        sync.reconcile()
+        self.pull(sync)
+        first = len(self.pages.calls)
+        self.pull(sync)
+        self.assertEqual(len(self.pages.calls), first, "a page that was read is kept, and one that failed waits 6 hours")
+        self.clock.advance(7 * 3600)
+        self.pull(sync)
+        self.assertEqual(sorted(self.pages.calls[first:]), ["https://supper.fixture.test/", "https://www.quicket.co.za/events/100001-fixture-film/"],
+                         "Monday's run is more than a day old, the read page is kept, and the failed ones are tried again")
+
+    def test_a_site_turning_us_away_is_left_for_the_next_pull(self):
+        late = "https://www.instagram.com/p/FixtureLate1/"
+        more = "https://www.instagram.com/p/FixtureMore1/"
+        extra = sundry.parse_post(body(("Friday, October 2, 2026", [item("Fixture Second Night", more, "8:00PM", "Fixture Basement", "R50")])),
+                                  PUBLISHED)
+        self.source.pull = sundry.Pull(self.week + extra)
+        self.pages.pages = {late: PreviewError("Instagram did not describe the post", blocked=True)}
+        sync = self.sync()
+        sync.reconcile()
+        with self.assertLogs("events.sync", "WARNING"):
+            self.pull(sync)
+        self.assertIn(late, self.pages.calls)
+        self.assertNotIn(more, self.pages.calls, "the next Instagram page is not asked for")
+        self.assertIn("https://supper.fixture.test/", self.pages.calls, "other sites are still read")
+        self.assertEqual(self.store.feed(SUNDRY_FEED).item_count, 6, "the events themselves are stored all the same")
+        self.pages.pages = {late: {"image": None, "author": None, "text": "Back", "venue": None, "address": None, "tags": []},
+                            more: {"image": None, "author": None, "text": "Too", "venue": None, "address": None, "tags": []}}
+        self.pages.calls.clear()
+        self.pull(sync)
+        self.assertEqual(sorted(self.pages.calls), [late, more], "and both are read on the next pull, without waiting out a failure")
+
+    def test_housekeeping_forgets_unused_previews_and_keeps_pictures_in_use(self):
+        self.store.save_preview("https://old.fixture.test/", {"image": "media/" + "b" * 32 + ".jpg"})
+        self.clock.advance(61 * DAY)
+        self.store.save_preview("https://new.fixture.test/", {"image": "media/" + "c" * 32 + ".jpg"})
+        self.assertEqual(self.store.prune_previews(), {"media/" + "c" * 32 + ".jpg"})
+        self.assertEqual(self.store.previews(["https://old.fixture.test/", "https://new.fixture.test/"]),
+                         {"https://new.fixture.test/": {"image": "media/" + "c" * 32 + ".jpg"}})
+

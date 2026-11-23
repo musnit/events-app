@@ -12,14 +12,14 @@ README.md is the user-facing documentation; this file is for working on the code
   - `config.py` `EVENTS_*` settings (table in README.md) · `db.py` SQLite + numbered migrations · `store.py` all SQL
   - `sources/` one client per upstream (`luma.py`, `partiful.py`, `agihouse.py`, `sundry.py`) → listing dicts (shape in `sources/__init__.py`)
   - `sync.py` background workers · `catalog.py` merges listings into the event list · `categorize.py` vibes/topics
-  - `areas.py` Bay Area zones, Cape Town · `ics.py` iCalendar read/write · `web.py` HTTP/API/static · `legacy.py` v1 import
+  - `preview.py` reads a linked page's picture, organiser and words (Open Graph, schema.org) · `areas.py` Bay Area zones, Cape Town · `ics.py` iCalendar read/write · `web.py` HTTP/API/static · `legacy.py` v1 import
 - `web/` — frontend: React 19 + TypeScript + Vite, plain CSS, no router or UI libraries.
   - `src/lib/` pure logic (routes, filters, dates, formatting, API client, bookmarklets, PWA)
   - `src/state/` data store (polling), router, toasts · `src/components/` · `src/views/` one file per screen
   - `tests/` node:test unit tests · `scripts/ui-check.mjs` headless-Chromium screenshots and layout audit
 - `tests/` — backend unittest suite (offline; upstreams are faked).
 - State lives in `EVENTS_STATE_DIR` (default `~/.local/state/events`; on devbox the gitignored `data/`, 0700):
-  `events.db` (events, sources, **secrets**, prefs) and `legacy/` (v1 files after import).
+  `events.db` (events, sources, **secrets**, prefs), `media/` (pictures saved from linked pages) and `legacy/` (v1 files after import).
 - Nix: `package.nix` (offline build running both test suites), `module.nix` (`services.events`),
   `flake.nix` + `standalone-test.nix` (the module's VM test).
 - `scripts/check.sh` runs the non-Nix checks.
@@ -113,6 +113,15 @@ live in a private bucket, so covers go through `partiful.imgix.net`. The persona
   cut titles in meta `sundry_locked` for the Cape Town tab and the Sources page.
 - The session is secret `substack_session` (`PUT|DELETE /api/sundry/session`); the API checks that it unlocks
   the newest post before saving it.
+- After storing the week, the pull reads the page each coming event links to (`preview.py`), one every
+  `EVENTS_PREVIEW_SPACING` seconds, and stores the listings again as pictures arrive. A page is read once: its
+  preview is kept in `link_previews` by address (a failure waits 6 h, doubling to a week) and merged into the
+  listing on every later pull. Instagram gives a non-browser client the post's Open Graph tags (picture, account,
+  caption) but a browser user agent only a script shell, so keep `net.USER_AGENT` un-browser-like. Its image
+  addresses are signed and expire, which is why the bytes are saved under `media/<sha256>.jpg` and served from
+  `/media/<name>`. A post without a picture means Instagram is turning the box away: the pull stops asking
+  Instagram and tries again next time. Quicket, Luma and Moments carry a schema.org `Event` with the organiser
+  and the venue's address. Every fetched address, redirects included, must resolve to a public IP.
 - Each pull reads the two newest weekly posts. A listing's id is a hash of its link and its date, so a weekly
   series that reuses one Instagram post is a new event each week.
 
@@ -141,7 +150,7 @@ and private data), it only shows an offline page.
 
 `GET /api/events` (catalog; ETag/304, gzip) · `GET /api/status` (sources, workers, feeds, prefs) ·
 `POST /api/sync {source?}` · `PUT /api/prefs {muted_calendars?, area?}` · `PUT /api/events/<id>/mark {starred?, hidden?}` ·
-`GET /api/events/<id>/ics` · `GET /feed.ics?scope=mine|all` ·
+`GET /api/events/<id>/ics` · `GET /feed.ics?scope=mine|all` · `GET /media/<name>` (saved pictures) ·
 `POST /api/luma/import {payload}` · `POST /api/luma/links {text}` (calendars and events) · `DELETE /api/luma/calendars/<id>` ·
 `DELETE /api/luma/events/<id>` ·
 `PUT|DELETE /api/luma/session` · `PUT|DELETE /api/luma/ics` · `POST /api/partiful/import {payload}` ·

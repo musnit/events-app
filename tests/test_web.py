@@ -609,6 +609,24 @@ class SundryApiTest(WebTestCase):
         self.assertEqual(self.json_of(self.call("GET", "/api/status"))["sundry"]["locked"], [])
 
 
+class MediaTest(WebTestCase):
+    def test_serves_saved_pictures_by_exact_name_only(self):
+        media = self.app.settings.state_dir / "media"
+        media.mkdir(parents=True)
+        name = "0123456789abcdef0123456789abcdef.jpg"
+        (media / name).write_bytes(b"\xff\xd8\xfffixture")
+        (media / "notes.txt").write_text("private")
+        (self.app.settings.state_dir / "events.db").write_bytes(b"SECRET")
+        ok = self.call("GET", f"/media/{name}")
+        self.assertEqual((ok.status, ok.body, ok.content_type), (200, b"\xff\xd8\xfffixture", "image/jpeg"))
+        self.assertEqual(ok.headers["Cache-Control"], "private, max-age=31536000, immutable")
+        for path in ("/media/notes.txt", "/media/..%2Fevents.db", "/media/%2e%2e%2fevents.db", "/media/" + "f" * 32 + ".jpg",
+                     f"/media/{name}%00.txt", "/media/" + name.upper(), "/media/0123.jpg"):
+            with self.subTest(path=path):
+                self.assertEqual(self.call("GET", path).status, 404)
+        self.assertEqual(self.call("DELETE", f"/media/{name}").status, 405)
+
+
 class HandlerTest(WebTestCase):
     """The real BaseHTTPRequestHandler subclass, fed raw bytes instead of a socket."""
 
