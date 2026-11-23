@@ -21,7 +21,8 @@ from .db import Database
 from .sources import scrub
 from .timeutil import to_iso
 
-ORIGINS = ("followed", "import", "link", "config", "builtin")
+# "sundry": an Instagram account followed because Sundry Mag featured one of its events.
+ORIGINS = ("followed", "import", "link", "config", "builtin", "sundry")
 HISTORY_KEEP_DAYS = 60  # past events kept for the month view before pruning
 
 
@@ -448,6 +449,47 @@ class Store:
                 continue
             if image:
                 images.add(image)
+        return images
+
+    # ---------- Instagram posts ----------
+
+    def instagram_posts(self, username: str) -> list[dict]:
+        """An account's saved posts, newest first; ``events`` is None for a post not read yet."""
+        rows = self.db.query("SELECT code, username, taken_at, caption, image, events, attempts FROM instagram_posts "
+                             "WHERE username = ? ORDER BY taken_at DESC", (username,))
+        posts = []
+        for row in rows:
+            post = dict(row)
+            try:
+                post["events"] = json.loads(row["events"]) if row["events"] is not None else None
+            except ValueError:
+                post["events"] = None
+            posts.append(post)
+        return posts
+
+    def add_instagram_post(self, username: str, post: dict, image: str | None) -> None:
+        self.db.execute("INSERT OR IGNORE INTO instagram_posts (code, username, taken_at, caption, image, seen_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?)", (post["code"], username, post["taken_at"], scrub(post.get("caption") or ""),
+                                                      image, self.clock()))
+
+    def set_instagram_reading(self, code: str, events: list[dict]) -> None:
+        self.db.execute("UPDATE instagram_posts SET events = ? WHERE code = ?", (json.dumps(scrub(events)), code))
+
+    def count_instagram_attempt(self, codes: Iterable[str]) -> None:
+        with self.db.transaction() as conn:
+            conn.executemany("UPDATE instagram_posts SET attempts = attempts + 1 WHERE code = ?", [(code,) for code in codes])
+
+    def instagram_unread(self) -> int:
+        row = self.db.query_one("SELECT COUNT(*) AS n FROM instagram_posts WHERE events IS NULL")
+        return row["n"] if row else 0
+
+    def prune_instagram(self, keep_days: float = HISTORY_KEEP_DAYS) -> set[str]:
+        """Forget posts older than ``keep_days``, and those of accounts no longer followed. Returns the pictures still in use."""
+        cutoff = to_iso(self.clock() - keep_days * 86400)
+        self.db.execute("DELETE FROM instagram_posts WHERE taken_at < ? OR ('instagram:' || username) NOT IN "
+                        "(SELECT id FROM calendars)", (cutoff,))
+        images = {row["image"] for row in self.db.query("SELECT image FROM instagram_posts WHERE image IS NOT NULL")}
+        images |= {row["avatar_url"] for row in self.db.query("SELECT avatar_url FROM calendars WHERE avatar_url LIKE 'media/%'")}
         return images
 
     # ---------- RSVPs known by id ----------

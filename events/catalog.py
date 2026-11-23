@@ -24,8 +24,10 @@ from .timeutil import parse_iso, to_iso
 HISTORY_DAYS = 45  # enough for the month view to show earlier weeks of the current month
 # Which listing supplies an event's details when several feeds list it.
 FEED_RICHNESS = {"calendar": 6, "luma-event": 6, "luma-mine": 5, "partiful-mine": 4, "partiful-following": 4, "agihouse": 3,
-                 "partiful-feed": 2, "sundry": 2, "luma-ics": 1}
-SOURCE_RANK = {"luma": 0, "partiful": 1, "agihouse": 2, "sundry": 3}
+                 "partiful-feed": 2, "sundry": 2, "instagram": 2, "luma-ics": 1}
+SOURCE_RANK = {"luma": 0, "partiful": 1, "agihouse": 2, "sundry": 3, "instagram": 4}
+# A weekly list and the organiser's account both point at the same post; a day apart they are still one event.
+SAME_LINK_WINDOW_S = 20 * 3600
 DUPLICATE_WINDOW_S = 3 * 3600
 DUPLICATE_SIMILARITY = 0.6
 
@@ -114,7 +116,7 @@ class Catalog:
             if (ev.get("end_at") or ev["start_at"]) >= upcoming_cutoff:
                 for cid in ev["calendar_ids"]:
                     counts[cid] = counts.get(cid, 0) + 1
-        feeds = {f.calendar_id: f for f in self.store.feeds() if f.kind == "calendar" and f.calendar_id}
+        feeds = {f.calendar_id: f for f in self.store.feeds() if f.kind in ("calendar", "instagram") and f.calendar_id}
         cal_out = []
         for cal in calendars:
             feed = feeds.get(cal["id"])
@@ -134,11 +136,19 @@ class Catalog:
         ordered = sorted(events, key=lambda e: (SOURCE_RANK.get(e.get("source"), 9), e["start_at"]))
         kept: list[dict] = []
         by_hour: dict[int, list[tuple[dict, set[str]]]] = {}
+        by_link: dict[str, list[dict]] = {}
         for ev in ordered:
             start = _epoch(ev["start_at"])
             words = title_words(ev.get("name"))
             match = None
-            if start is not None and words:
+            if start is not None:
+                for other in by_link.get(ev.get("url") or "", []):
+                    other_start = _epoch(other["start_at"])
+                    if (other["source"] != ev["source"] and other_start is not None
+                            and abs(other_start - start) <= SAME_LINK_WINDOW_S):
+                        match = other
+                        break
+            if match is None and start is not None and words:
                 bucket = int(start // 3600)
                 for hour in range(bucket - 3, bucket + 4):
                     for other, other_words in by_hour.get(hour, []):
@@ -159,6 +169,8 @@ class Catalog:
             kept.append(ev)
             if start is not None:
                 by_hour.setdefault(int(start // 3600), []).append((ev, words))
+                if ev.get("url"):
+                    by_link.setdefault(ev["url"], []).append(ev)
         return kept
 
     # ---------- cached, serialized snapshot ----------

@@ -10,9 +10,9 @@ README.md is the user-facing documentation; this file is for working on the code
 - `server.py` — checkout entry point (`python3 server.py`, the same as `python3 -m events`).
 - `events/` — backend, Python 3.11+ **standard library only**.
   - `config.py` `EVENTS_*` settings (table in README.md) · `db.py` SQLite + numbered migrations · `store.py` all SQL
-  - `sources/` one client per upstream (`luma.py`, `partiful.py`, `agihouse.py`, `sundry.py`) → listing dicts (shape in `sources/__init__.py`)
+  - `sources/` one client per upstream (`luma.py`, `partiful.py`, `agihouse.py`, `sundry.py`, `instagram.py`) → listing dicts (shape in `sources/__init__.py`)
   - `sync.py` background workers · `catalog.py` merges listings into the event list · `categorize.py` vibes/topics
-  - `preview.py` reads a linked page's picture, organiser and words (Open Graph, schema.org) · `areas.py` Bay Area zones, Cape Town · `ics.py` iCalendar read/write · `web.py` HTTP/API/static · `legacy.py` v1 import
+  - `reader.py` runs Claude Code to read Instagram posts into events · `preview.py` reads a linked page's picture, organiser and words (Open Graph, schema.org) · `areas.py` Bay Area zones, Cape Town · `ics.py` iCalendar read/write · `web.py` HTTP/API/static · `legacy.py` v1 import
 - `web/` — frontend: React 19 + TypeScript + Vite, plain CSS, no router or UI libraries.
   - `src/lib/` pure logic (routes, filters, dates, formatting, API client, bookmarklets, PWA)
   - `src/state/` data store (polling), router, toasts · `src/components/` · `src/views/` one file per screen
@@ -53,7 +53,7 @@ font: point `FONTCONFIG_FILE` at a config that adds Noto Color Emoji, or chips s
   complete followed set, so re-running it also drops unfollowed calendars), `link`, `config`
   (`EVENTS_LUMA_CALENDARS`), `builtin`. The API refuses to remove `followed` and `config` calendars.
 - **feed**: one unit a worker pulls (`luma:cal-…`, `luma:evt-…`, `luma:following`, `luma:mine`, `luma:ics`,
-  `luma:config`, `partiful:<uid>:mine|following`, `partiful:feed`, `agihouse`, `sundry`). Holds sync health and backoff.
+  `luma:config`, `partiful:<uid>:mine|following`, `partiful:feed`, `agihouse`, `sundry`, `instagram:<account>`). Holds sync health and backoff.
 - **linked event**: a single Luma event added by link (`linked_events`), private ones included. Its feed
   `luma:evt-…` lists it under the builtin calendar `luma-links` and refreshes it like a calendar; the catalog
   marks it `linked`, and the web app's area filter leaves it in. It goes when removed or when its listing ages out.
@@ -71,7 +71,7 @@ One worker thread per upstream with a de-duplicated priority queue: user refresh
 schedule. Nothing is dropped; asking again only raises priority. Each pull is stored immediately, so the
 UI fills in during a pass and restarts resume from per-feed timestamps. Intervals (each an `EVENTS_*`
 setting): Luma calendars 4 h, 15 s apart; user-triggered pulls 2 s apart; personal feeds, Partiful 1 h; AGI House 2 h;
-Sundry Mag 6 h.
+Sundry Mag 6 h; Instagram accounts 12 h, 20 s apart (a sync asked for by hand is no faster).
 A 429 pauses the Luma worker (45 s → 5 min) and retries; other failures back off per feed (10 min → 4 h)
 and keep the feed's previous listings. A Luma 401 forgets the session and retries without it.
 
@@ -125,6 +125,28 @@ live in a private bucket, so covers go through `partiful.imgix.net`. The persona
 - Each pull reads the two newest weekly posts. A listing's id is a hash of its link and its date, so a weekly
   series that reuses one Instagram post is a new event each week.
 
+## Instagram accounts
+
+- An account is a calendar `instagram:<account>` (source `instagram`) with a feed of the same key. Origin `link`
+  is an account added in Sources; origin `sundry` is the account behind an event Sundry Mag listed (taken from the
+  link previews' `author.id`), kept while meta `instagram_seen` shows it featured in the last 60 days. Removing an
+  account in the app adds it to meta `instagram_dismissed`, so Sundry does not bring it back.
+- `GET instagram.com/<account>/embed/` needs no sign-in. A script in it holds `"contextJSON":"…"`, a JSON string
+  whose `context` has `username`, `full_name`, `profile_pic_url` and `graphql_media`: the six newest posts
+  (`shortcode`, `taken_at_timestamp`, `display_url`, `edge_media_to_caption`). The profile page itself and
+  `api/v1/users/web_profile_info` give a signed-out client nothing.
+- A post is not an event. Posts from the last 45 days are saved in `instagram_posts` with their picture, and
+  `reader.py` asks Claude which announce an event, once per post (three tries). It runs the Claude Code program
+  (`EVENTS_CLAUDE`, signed in as the service's user, no API key): `claude --print --json-schema … --system-prompt …`
+  with the captions on stdin and the pictures copied into a temporary working directory. Captions are strangers'
+  text, so the run has `--tools Read --restricted --safe-mode --strict-mcp-config --permission-prompts none` (it can
+  read those pictures and do nothing else), and `parse_answer` keeps only well-formed events dated from yesterday
+  to 120 days ahead. Each account's listings are rebuilt from every saved post, since posts leave Instagram's six.
+- Followed accounts get feeds only while a reader is available (`Sync.instagram_on`); without one the accounts
+  stay as calendars and nothing is polled.
+- A weekly list and the organiser's account often announce the same post: the catalog folds listings from
+  different sources that share a `url` and start within 20 hours, keeping the copy of the higher-ranked source.
+
 ## Categories
 
 `categorize.py` scores keyword rules over title (weight 3), tags (2), presenter name + listing calendars (2),
@@ -154,7 +176,7 @@ and private data), it only shows an offline page.
 `POST /api/luma/import {payload}` · `POST /api/luma/links {text}` (calendars and events) · `DELETE /api/luma/calendars/<id>` ·
 `DELETE /api/luma/events/<id>` ·
 `PUT|DELETE /api/luma/session` · `PUT|DELETE /api/luma/ics` · `POST /api/partiful/import {payload}` ·
-`PUT|DELETE /api/sundry/session {session}` ·
+`PUT|DELETE /api/sundry/session {session}` · `POST /api/instagram/accounts {text}` · `DELETE /api/instagram/accounts/<account>` ·
 `DELETE /api/partiful/accounts/<uid>` · `PUT|DELETE /api/partiful/feed` · `GET /api/health`.
 Writes must be same-origin JSON (Sec-Fetch-Site/Origin checked); the portal in front handles sign-in.
 
@@ -183,6 +205,7 @@ Writes must be same-origin JSON (Sec-Fetch-Site/Origin checked); the portal in f
 ## Gotchas
 
 - `events.db` holds the Luma session, the Substack session, Partiful refresh tokens and private feed URLs. Never commit `data/`.
+- Tests set `EVENTS_CLAUDE` empty (`tests/helpers.py`), so none can start the real Claude Code program; keep it so.
 - Migration 3 creates a `research_collections` table and migration 4 drops it. Both stay: a deployed database has run 3.
   The feature (a Mumbai trip's research notes) is in history at `10fe1f8`.
 - This repository is public. Tests and fixtures use made-up ids, names, venues, images and links (`evt-Fixture…`,

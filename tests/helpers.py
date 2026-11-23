@@ -65,7 +65,9 @@ def temp_dir(test: unittest.TestCase) -> Path:
 def make_settings(root: Path, **env: str) -> Settings:
     values = {"EVENTS_STATE_DIR": str(root / "state"), "EVENTS_WEB_DIR": str(root / "web"), "EVENTS_SYNC": "0",
               # Off unless a test asks: every other test counts the feeds of the three original sources.
-              "EVENTS_SUNDRY": "0", "EVENTS_PREVIEW_SPACING": "0"}
+              "EVENTS_SUNDRY": "0", "EVENTS_PREVIEW_SPACING": "0",
+              # No test may start the real Claude Code program.
+              "EVENTS_INSTAGRAM": "0", "EVENTS_CLAUDE": ""}
     values.update(env)
     return Settings.from_env(values)
 
@@ -217,6 +219,43 @@ class FakePreviews:
     def prune(self, keep: set[str], older_than: float) -> int:
         self.pruned.append((keep, older_than))
         return 0
+
+    def keep_image(self, url: str) -> str | None:
+        import hashlib
+
+        return "media/" + hashlib.sha256(url.encode()).hexdigest()[:32] + ".jpg"
+
+
+class FakeInstagram:
+    """Stands in for ``InstagramClient``: ``pages`` maps an account name to its page, or to an exception."""
+
+    def __init__(self, pages: dict[str, object] | None = None):
+        self.pages = pages or {}
+        self.calls: list[str] = []
+
+    def account(self, username: str) -> dict:
+        from events.sources.instagram import InstagramError
+
+        self.calls.append(username)
+        if username not in self.pages:
+            raise InstagramError(f"Instagram answered 404 for @{username}")
+        return _answer(self.pages[username])
+
+
+class FakeReader:
+    """Stands in for ``ClaudeReader``. ``answer(account, posts, today)`` returns {post code: [event, …]}."""
+
+    def __init__(self, answer=None, available: bool = True):
+        self.answer = answer or (lambda account, posts, today: {})
+        self.available = available
+        self.calls: list[tuple[str, list[str], str]] = []
+
+    def read(self, account: dict, posts: list[dict], today) -> dict:
+        self.calls.append((account["username"], [p["code"] for p in posts], today.isoformat()))
+        result = self.answer(account, posts, today)
+        if isinstance(result, BaseException):
+            raise result
+        return result
 
 
 def jwt(claims: dict) -> str:

@@ -260,6 +260,13 @@ class PreviewClient:
         return {"image": image, "author": found["author"], "text": found["text"], "venue": found["venue"],
                 "address": found["address"], "tags": found["tags"]}
 
+    def keep_image(self, url: str) -> str | None:
+        """Save the picture at an address and return its media path, or None when it cannot be had."""
+        try:
+            return self._keep(self._fetch(url, MAX_IMAGE_BYTES).body)
+        except PreviewError:
+            return None
+
     def _keep(self, body: bytes) -> str | None:
         kind = next((ext for magic, ext in IMAGE_TYPES if body.startswith(magic)), None)
         if kind is None and body[:4] == b"RIFF" and body[8:12] == b"WEBP":

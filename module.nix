@@ -72,6 +72,15 @@ in
       description = "Include Sundry Mag's weekly list of things to do in Cape Town.";
     };
 
+    instagram = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Follow Instagram accounts and read their posts into events. This runs the Claude Code program as the
+        service's user, which must be signed in to it; set EVENTS_CLAUDE in `environment` to its path.
+      '';
+    };
+
     sync = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -111,6 +120,7 @@ in
         EVENTS_LUMA_CALENDARS = lib.concatStringsSep " " cfg.lumaCalendars;
         EVENTS_AGIHOUSE = flag cfg.agihouse;
         EVENTS_SUNDRY = flag cfg.sundry;
+        EVENTS_INSTAGRAM = flag cfg.instagram;
         EVENTS_SYNC = flag cfg.sync;
       }
       // cfg.environment;

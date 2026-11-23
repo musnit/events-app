@@ -14,7 +14,7 @@ from events.sources.sundry import SundryError
 from events.sync import NEW, USER, Sync
 from events.web import Request
 
-from .helpers import (NOW, FakeAgiHouse, FakeClock, FakeLuma, FakePartiful, FakeSundry, add_feed, calendar, fixture, iso, jwt, listing,
+from .helpers import (NOW, FakeAgiHouse, FakeClock, FakeInstagram, FakeLuma, FakePartiful, FakeReader, FakeSundry, add_feed, calendar, fixture, iso, jwt, listing,
                       make_settings, make_store, serve_raw, temp_dir)
 
 INDEX_HTML = ('<!doctype html><html><head><meta charset="utf-8" /><base href="/" /><title>luma-cal</title></head>'
@@ -48,9 +48,10 @@ class WebTestCase(unittest.TestCase):
         self.clock = FakeClock()
         self.store = make_store(self, self.clock)
         self.luma, self.partiful, self.agihouse, self.sundry = FakeLuma(), FakePartiful(), FakeAgiHouse(), FakeSundry()
+        self.reader = FakeReader(available=False)
         settings = make_settings(self.root, **self.ENV)
         self.sync = Sync(self.store, settings, luma=self.luma, partiful=self.partiful, agihouse=self.agihouse,
-                         sundry=self.sundry, clock=self.clock)
+                         sundry=self.sundry, instagram=FakeInstagram(), reader=self.reader, clock=self.clock)
         self.catalog = Catalog(self.store, clock=self.clock)
         self.app = web.App(settings, self.store, self.sync, self.catalog)
 
@@ -552,7 +553,7 @@ class StatusTest(WebTestCase):
                                           "calendars": 3, "calendars_by_origin": {"followed": 1, "import": 1, "link": 1, "config": 0},
                                           "going_snapshot": 1, "linked_events": []})
         self.assertEqual(status["partiful"], {"accounts": [{"uid": "uid-1", "name": "Jordan", "added_at": NOW}], "feed": None})
-        self.assertEqual(set(status["workers"]), {"luma", "partiful", "agihouse", "sundry"})
+        self.assertEqual(set(status["workers"]), {"luma", "partiful", "agihouse", "sundry", "instagram"})
         self.assertIn("luma:following", [f["key"] for f in status["feeds"]])
         self.assertEqual(status["prefs"], {"area": "bay"})
         body = json.dumps(status)
@@ -607,6 +608,35 @@ class SundryApiTest(WebTestCase):
         self.assertEqual(self.json_of(self.call("POST", "/api/sync", {"source": "sundry"})), {"queued": 1})
         self.store.set_meta("sundry_locked", "not json")
         self.assertEqual(self.json_of(self.call("GET", "/api/status"))["sundry"]["locked"], [])
+
+
+class InstagramApiTest(WebTestCase):
+    ENV = {"EVENTS_INSTAGRAM": "1"}
+
+    def test_follow_and_stop_following_accounts(self):
+        self.reader.available = True
+        response = self.call("POST", "/api/instagram/accounts", {"text": "@Fixture_Basement https://www.instagram.com/fixture.runclub/"})
+        self.assertEqual((response.status, self.json_of(response)), (200, {"added": ["fixture_basement", "fixture.runclub"]}))
+        self.assertEqual(self.queued("instagram"), {"instagram:fixture.runclub": NEW, "instagram:fixture_basement": NEW})
+        status = self.json_of(self.call("GET", "/api/status"))["instagram"]
+        self.assertEqual((status["enabled"], status["reader"], status["unread"]), (True, True, 0))
+        self.assertEqual(status["accounts"], [{"username": "fixture.runclub", "name": "@fixture.runclub", "origins": ["link"], "last_error": None},
+                                              {"username": "fixture_basement", "name": "@fixture_basement", "origins": ["link"], "last_error": None}])
+        self.assertEqual(self.call("DELETE", "/api/instagram/accounts/Fixture_Basement").status, 200)
+        self.assertIsNone(self.store.calendar("instagram:fixture_basement"))
+        self.assertIsNone(self.store.feed("instagram:fixture_basement"))
+        self.assertEqual(json.loads(self.store.get_meta("instagram_dismissed")), ["fixture_basement"])
+        self.call("POST", "/api/instagram/accounts", {"text": "fixture_basement"})
+        self.assertEqual(json.loads(self.store.get_meta("instagram_dismissed")), [], "following again forgets the removal")
+
+    def test_refusals(self):
+        self.assertEqual(self.call("POST", "/api/instagram/accounts", {"text": "@fixture_basement"}).status, 409, "no reader, no following")
+        self.reader.available = True
+        for text in ("", "https://example.com/x", None, " ".join(f"@fixture_{n}" for n in range(51))):
+            self.assertEqual(self.call("POST", "/api/instagram/accounts", {"text": text}).status, 400)
+        self.assertEqual(self.call("DELETE", "/api/instagram/accounts/fixture_nobody").status, 404)
+        add_feed(self.store, "luma:cal-fixture", calendar_id="cal-fixture")
+        self.assertEqual(self.call("DELETE", "/api/instagram/accounts/cal-fixture").status, 404)
 
 
 class MediaTest(WebTestCase):

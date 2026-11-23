@@ -25,6 +25,7 @@ from . import __version__, ics, net
 from .catalog import Catalog
 from .config import Settings
 from .preview import MEDIA_NAME_RE
+from .sources import instagram as instagram_src
 from .sources import luma as luma_src
 from .sources import partiful as partiful_src
 from .sources import sundry as sundry_src
@@ -157,6 +158,8 @@ class App:
         r("DELETE", "/api/partiful/feed", self.partiful_clear_feed)
         r("PUT", "/api/sundry/session", self.sundry_set_session)
         r("DELETE", "/api/sundry/session", self.sundry_clear_session)
+        r("POST", "/api/instagram/accounts", self.instagram_add)
+        r("DELETE", "/api/instagram/accounts/{username}", self.instagram_remove)
         r("GET", "/feed.ics", self.feed_ics)
 
     # ---------- dispatch ----------
@@ -278,6 +281,12 @@ class App:
             "partiful": {"accounts": accounts, "feed": mask((feed_cfg or {}).get("url"))},
             "sundry": {"enabled": self.settings.sundry, "session": bool(self.store.get_secret("substack_session")),
                        "locked": self._sundry_locked()},
+            "instagram": {
+                "enabled": self.settings.instagram, "reader": self.sync.reader.available,
+                "accounts": [{"username": c["id"].split(":", 1)[1], "name": c["name"], "origins": c["origins"],
+                              "last_error": errors.get(c["id"])} for c in calendars if c["source"] == "instagram"],
+                "unread": self.store.instagram_unread(),
+            },
             "workers": self.sync.status(),
             "feeds": feeds,
             "prefs": self.store.prefs(),
@@ -434,6 +443,42 @@ class App:
     def sundry_clear_session(self, req: Request) -> Response:
         self.store.delete_secret("substack_session")
         self.sync.sources_changed(refresh=[SUNDRY_FEED])
+        return json_response({"ok": True})
+
+    # ---------- Instagram accounts ----------
+
+    def _instagram_dismissed(self) -> set[str]:
+        try:
+            names = json.loads(self.store.get_meta("instagram_dismissed") or "[]")
+        except ValueError:
+            return set()
+        return {str(name) for name in names} if isinstance(names, list) else set()
+
+    def instagram_add(self, req: Request) -> Response:
+        if not self.sync.instagram_on:
+            raise ApiError(409, "Following Instagram accounts needs the Claude Code program, which this app cannot find")
+        names = instagram_src.usernames(str(req.json().get("text") or ""))
+        if not names:
+            raise ApiError(400, "paste one or more Instagram account names or profile links")
+        if len(names) > 50:
+            raise ApiError(400, "add at most 50 accounts at a time")
+        for name in names:
+            existing = self.store.calendar(instagram_src.calendar_id(name))
+            self.store.upsert_calendar(instagram_src.calendar(name, (existing or {}).get("name")), "link")
+        # An account removed earlier is wanted again.
+        self.store.set_meta("instagram_dismissed", json.dumps(sorted(self._instagram_dismissed() - set(names))))
+        self.sync.sources_changed()
+        return json_response({"added": names})
+
+    def instagram_remove(self, req: Request) -> Response:
+        username = req.params["username"].lower()
+        cal = self.store.calendar(instagram_src.calendar_id(username))
+        if cal is None or cal["source"] != "instagram":
+            raise ApiError(404, "no such Instagram account")
+        # Remembered, so that Sundry Mag featuring the account again does not bring it back.
+        self.store.set_meta("instagram_dismissed", json.dumps(sorted(self._instagram_dismissed() | {username})))
+        self.store.remove_calendar(cal["id"])
+        self.sync.sources_changed()
         return json_response({"ok": True})
 
     # ---------- Partiful ----------

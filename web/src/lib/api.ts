@@ -84,4 +84,6 @@ export const api = {
   partifulClearFeed: () => send<{ ok: true }>("DELETE", "api/partiful/feed"),
   sundrySetSession: (session: string) => send<{ ok: true; events: number }>("PUT", "api/sundry/session", { session }),
   sundryClearSession: () => send<{ ok: true }>("DELETE", "api/sundry/session"),
+  instagramAdd: (text: string) => send<{ added: string[] }>("POST", "api/instagram/accounts", { text }),
+  instagramRemove: (username: string) => send<{ ok: true }>("DELETE", `api/instagram/accounts/${encodeURIComponent(username)}`),
 };

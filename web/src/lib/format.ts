@@ -91,11 +91,11 @@ export function fmtPrice(ticket: Ticket | null): string | null {
   return money(ticket.price_cents);
 }
 
-export const SOURCE_LABEL: Record<Source, string> = { luma: "Luma", partiful: "Partiful", agihouse: "AGI House", sundry: "Sundry Mag" };
+export const SOURCE_LABEL: Record<Source, string> = { luma: "Luma", partiful: "Partiful", agihouse: "AGI House", sundry: "Sundry Mag", instagram: "Instagram" };
 
 /** The main button on an event. A weekly list links wherever the organiser posted, so the site names the button. */
 export function eventLinkLabel(ev: Pick<EventItem, "source" | "url" | "going">): string {
-  if (ev.source !== "sundry") return `${ev.going ? "Open" : "RSVP"} on ${SOURCE_LABEL[ev.source]}`;
+  if (ev.source !== "sundry" && ev.source !== "instagram") return `${ev.going ? "Open" : "RSVP"} on ${SOURCE_LABEL[ev.source]}`;
   let host = "";
   try {
     host = new URL(ev.url).hostname.replace(/^www\./, "");

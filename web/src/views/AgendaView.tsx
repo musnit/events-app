@@ -45,7 +45,8 @@ function CapeTownSources() {
   return (
     <p className="list-footer">
       Cape Town events come from your calendars
-      {status?.sundry.enabled && <> and from <a href="https://sundrymag.substack.com/" target="_blank" rel="noopener noreferrer">Sundry Mag</a>'s weekly list</>}.
+      {status?.sundry.enabled && <>, from <a href="https://sundrymag.substack.com/" target="_blank" rel="noopener noreferrer">Sundry Mag</a>'s weekly list</>}
+      {status?.instagram.enabled && status.instagram.reader && <> and from the <Link to={href({ name: "sources", section: "sundry" })}>Instagram accounts</Link> you follow</>}.
       {LOCAL_TZ !== "Africa/Johannesburg" && " Times are Cape Town's (SAST)."}
     </p>
   );
