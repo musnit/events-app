@@ -92,6 +92,48 @@ class BuildTest(CatalogTestCase):
         self.store.replace_listings(self.cal_b, [listing("evt-y", name="Founders Dinner")])
         self.assertEqual(sorted(self.events()), ["evt-x", "evt-y"])
 
+    def test_two_instagram_accounts_announcing_one_event_fold_into_the_organisers_copy(self):
+        guide = add_feed(self.store, "instagram:fixture_guide", calendar_id="instagram:fixture_guide", kind="instagram", source="instagram")
+        venue = add_feed(self.store, "instagram:fixture_artspace", calendar_id="instagram:fixture_artspace", kind="instagram", source="instagram")
+
+        def gig(event_id: str, name: str, account: str, post: str, place: str | None, hours: float = 48) -> dict:
+            location = dict(listing("x")["location"], venue=place)
+            return listing(event_id, source="instagram", name=name, start=iso(hours), url=f"https://www.instagram.com/p/{post}/",
+                           location=location, presenter={"id": f"instagram:{account}", "name": account})
+
+        self.store.replace_listings(guide, [
+            gig("ig-guide-studio", "Studio Sessions", "fixture_guide", "FixtureGuide1", "Fixture Artspace"),
+            gig("ig-guide-mic", "Open Mic", "fixture_guide", "FixtureGuide1", "Example Tavern"),
+            gig("ig-guide-quiz", "Quiz Night", "fixture_guide", "FixtureGuide1", "Example Tavern"),
+            gig("ig-guide-late", "Studio Sessions", "fixture_guide", "FixtureGuide1", "Fixture Artspace", hours=54),
+            gig("ig-guide-twin", "Jam Night", "fixture_guide", "FixtureGuide1", "Example Tavern"),
+            gig("ig-guide-twin-2", "Jam Night", "fixture_guide", "FixtureGuide1", "Example Tavern", hours=49),
+        ])
+        self.store.replace_listings(venue, [
+            gig("ig-own-studio", "Studio Sessions: Holiday Still Life", "fixture_artspace", "FixtureOwn01", "The Fixture Artspace, Cape Town", hours=49),
+            gig("ig-own-mic", "Open Mic", "fixture_artspace", "FixtureOwn02", "Fixture Artspace"),
+            gig("ig-own-quiz", "Quiz Night", "fixture_artspace", "FixtureOwn03", None),
+        ])
+        events = self.events()
+        self.assertEqual(sorted(events), ["ig-guide-late", "ig-guide-mic", "ig-guide-twin", "ig-guide-twin-2", "ig-own-mic", "ig-own-quiz", "ig-own-studio"],
+                         "the same title at another venue, hours later, or twice from one account stays")
+        studio = events["ig-own-studio"]
+        self.assertEqual((studio["name"], studio["calendar_ids"]),
+                         ("Studio Sessions: Holiday Still Life", ["instagram:fixture_artspace", "instagram:fixture_guide"]))
+        self.assertEqual(studio["also_on"], [{"source": "instagram", "url": "https://www.instagram.com/p/FixtureGuide1/"}])
+        self.assertEqual(events["ig-own-quiz"]["calendar_ids"], ["instagram:fixture_artspace", "instagram:fixture_guide"],
+                         "a copy that names no venue folds on its title")
+        # The weekly list tells it in more words than the account does: one event, the list's copy kept.
+        weekly = add_feed(self.store, "sundry", calendar_id="sundry", kind="sundry", source="sundry")
+        self.store.replace_listings(weekly, [
+            dict(gig("sundry-mic", "Open Mic with the House Band", "fixture_other", "FixtureOther1", "Example Tavern"), source="sundry"),
+            dict(gig("sundry-jam", "Jam Night for Beginners", "fixture_other", "FixtureOther2", "Fixture Artspace"), source="sundry")])
+        events = self.events()
+        self.assertNotIn("ig-guide-mic", events)
+        self.assertEqual(events["sundry-mic"]["calendar_ids"], ["instagram:fixture_guide", "sundry"])
+        self.assertIn("ig-own-mic", events, "the open mic at the other venue is another event")
+        self.assertIn("ig-guide-twin", events, "a longer title at another venue is another event")
+
     def test_placeholders_are_skipped(self):
         self.store.replace_listings(self.cal_a, [listing("evt-hold", name="HOLD - 2nd Floor Private Rental"),
                                                  listing("evt-tbd", name="Philosophy Event (HOLD) Details to come!"),

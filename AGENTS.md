@@ -152,6 +152,11 @@ live in a private bucket, so covers go through `partiful.imgix.net`. The persona
   stay as calendars and nothing is polled.
 - A weekly list and the organiser's account often announce the same post: the catalog folds listings from
   different sources that share a `url` and start within 20 hours, keeping the copy of the higher-ranked source.
+- Sundry and the accounts retell one event in different words, and a guide account lists gigs the venues announce
+  too. For events starting within 3 hours (`catalog._same_title`): Sundry and an account, or two different accounts,
+  also fold when one title is the other with more said; two accounts fold on a like title as well. Neither happens
+  when both copies name venues with no word in common (an open mic at two bars). Among Instagram's events the copy
+  from the post announcing fewer events is kept, so the organiser's own post wins over a guide's entry.
 
 ## Categories
 

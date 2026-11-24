@@ -34,6 +34,10 @@ SAME_ORGANISER_WINDOW_S = 24 * 3600
 SAME_ORGANISER_SIMILARITY = 0.4
 DUPLICATE_WINDOW_S = 3 * 3600
 DUPLICATE_SIMILARITY = 0.6
+# Sources that read what organisers post about themselves, where one event is often told twice in different words.
+RETOLD_SOURCES = {"sundry", "instagram"}
+# Words that say nothing about which venue is meant.
+VENUE_FILLER = {"the", "and", "at", "of", "in", "on", "cape", "town"}
 
 
 @dataclass(frozen=True)
@@ -52,11 +56,46 @@ def _similar(a: set[str], b: set[str]) -> bool:
     return bool(a and b) and len(a & b) / len(a | b) >= DUPLICATE_SIMILARITY
 
 
+def _contained(a: set[str], b: set[str]) -> bool:
+    """One title is the other with more said: "Studio Sessions" and "Studio Sessions: Holiday Still Life"."""
+    return min(len(a), len(b)) >= 2 and (a <= b or b <= a)
+
+
 def _same_under_one_organiser(a: set[str], b: set[str]) -> bool:
     if not a or not b:
         return False
-    contained = min(len(a), len(b)) >= 2 and (a <= b or b <= a)
-    return contained or len(a & b) / len(a | b) >= SAME_ORGANISER_SIMILARITY
+    return _contained(a, b) or len(a & b) / len(a | b) >= SAME_ORGANISER_SIMILARITY
+
+
+def _organiser(ev: dict) -> str | None:
+    return (ev.get("presenter") or {}).get("id")
+
+
+def _venue_words(ev: dict) -> set[str]:
+    return title_words((ev.get("location") or {}).get("venue")) - VENUE_FILLER
+
+
+def _same_title(ev: dict, words: set[str], other: dict, other_words: set[str]) -> bool:
+    """Whether two events starting close together are one event told twice.
+
+    Two upstreams rarely carry different events under one name, so a like title is enough. A weekly list and the
+    Instagram accounts retell one event in their own words, and two accounts can also mean different events by one
+    name (an open mic at two bars on one night; a guide listing a gig the venue announced too). Among those, a
+    title that is the other with more said also counts, and two accounts fold at all, only while the two copies do
+    not name venues with no word in common."""
+    retold = {ev["source"], other["source"]} <= RETOLD_SOURCES
+    if other["source"] != ev["source"]:
+        if _similar(words, other_words):
+            return True
+        return retold and _contained(words, other_words) and not _venues_differ(ev, other)
+    if ev["source"] != "instagram" or not _organiser(ev) or not _organiser(other) or _organiser(ev) == _organiser(other):
+        return False
+    return (_similar(words, other_words) or _contained(words, other_words)) and not _venues_differ(ev, other)
+
+
+def _venues_differ(a: dict, b: dict) -> bool:
+    here, there = _venue_words(a), _venue_words(b)
+    return bool(here and there) and not here & there
 
 
 def _epoch(iso: str | None) -> float | None:
@@ -143,14 +182,22 @@ class Catalog:
 
     @staticmethod
     def _merge_duplicates(events: list[dict]) -> list[dict]:
-        """Fold copies of one event posted on two upstreams into the copy from the richer upstream."""
-        ordered = sorted(events, key=lambda e: (SOURCE_RANK.get(e.get("source"), 9), e["start_at"]))
+        """Fold copies of one event posted on two upstreams, or by two Instagram accounts, into the richer copy."""
+        # A post that announces one event is the organiser's own; one that lists dozens is a guide. The organiser's
+        # copy is the one to keep, so among Instagram's events those of the smaller post come first.
+        per_post: dict[str, int] = {}
+        for ev in events:
+            if ev.get("source") == "instagram" and ev.get("url"):
+                per_post[ev["url"]] = per_post.get(ev["url"], 0) + 1
+        ordered = sorted(events, key=lambda e: (SOURCE_RANK.get(e.get("source"), 9),
+                                                per_post.get(e.get("url") or "", 0) if e.get("source") == "instagram" else 0,
+                                                e["start_at"]))
         kept: list[dict] = []
         by_hour: dict[int, list[tuple[dict, set[str]]]] = {}
         by_link: dict[str, list[dict]] = {}
         by_organiser: dict[str, list[tuple[dict, set[str]]]] = {}
         for ev in ordered:
-            organiser = (ev.get("presenter") or {}).get("id")
+            organiser = _organiser(ev)
             start = _epoch(ev["start_at"])
             words = title_words(ev.get("name"))
             match = None
@@ -173,8 +220,8 @@ class Catalog:
                 for hour in range(bucket - 3, bucket + 4):
                     for other, other_words in by_hour.get(hour, []):
                         other_start = _epoch(other["start_at"])
-                        if (other["source"] != ev["source"] and other_start is not None
-                                and abs(other_start - start) <= DUPLICATE_WINDOW_S and _similar(words, other_words)):
+                        if (other_start is not None and abs(other_start - start) <= DUPLICATE_WINDOW_S
+                                and _same_title(ev, words, other, other_words)):
                             match = other
                             break
                     if match:
