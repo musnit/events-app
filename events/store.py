@@ -454,23 +454,30 @@ class Store:
     # ---------- Instagram posts ----------
 
     def instagram_posts(self, username: str) -> list[dict]:
-        """An account's saved posts, newest first; ``events`` is None for a post not read yet."""
-        rows = self.db.query("SELECT code, username, taken_at, caption, image, events, attempts FROM instagram_posts "
+        """An account's saved posts, newest first; ``events`` is None for a post not read yet, and ``slides``
+        (a carousel's saved pictures) is None for a post whose slides were never looked at."""
+        rows = self.db.query("SELECT code, username, taken_at, caption, image, slides, events, attempts FROM instagram_posts "
                              "WHERE username = ? ORDER BY taken_at DESC", (username,))
         posts = []
         for row in rows:
             post = dict(row)
-            try:
-                post["events"] = json.loads(row["events"]) if row["events"] is not None else None
-            except ValueError:
-                post["events"] = None
+            for field in ("events", "slides"):
+                try:
+                    post[field] = json.loads(row[field]) if row[field] is not None else None
+                except ValueError:
+                    post[field] = None
             posts.append(post)
         return posts
 
-    def add_instagram_post(self, username: str, post: dict, image: str | None) -> None:
-        self.db.execute("INSERT OR IGNORE INTO instagram_posts (code, username, taken_at, caption, image, seen_at) "
-                        "VALUES (?, ?, ?, ?, ?, ?)", (post["code"], username, post["taken_at"], scrub(post.get("caption") or ""),
-                                                      image, self.clock()))
+    def add_instagram_post(self, username: str, post: dict, image: str | None, slides: list[str] | None = None) -> None:
+        self.db.execute("INSERT OR IGNORE INTO instagram_posts (code, username, taken_at, caption, image, slides, seen_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)", (post["code"], username, post["taken_at"], scrub(post.get("caption") or ""),
+                                                         image, json.dumps(slides or []), self.clock()))
+
+    def set_instagram_slides(self, code: str, slides: list[str]) -> None:
+        """Record a saved post's slides. A post read from its first picture alone is read again with all of them."""
+        again = ", events = NULL, attempts = 0" if len(slides) > 1 else ""
+        self.db.execute(f"UPDATE instagram_posts SET slides = ?{again} WHERE code = ?", (json.dumps(slides), code))
 
     def set_instagram_reading(self, code: str, events: list[dict]) -> None:
         self.db.execute("UPDATE instagram_posts SET events = ? WHERE code = ?", (json.dumps(scrub(events)), code))
@@ -488,7 +495,13 @@ class Store:
         cutoff = to_iso(self.clock() - keep_days * 86400)
         self.db.execute("DELETE FROM instagram_posts WHERE taken_at < ? OR ('instagram:' || username) NOT IN "
                         "(SELECT id FROM calendars)", (cutoff,))
-        images = {row["image"] for row in self.db.query("SELECT image FROM instagram_posts WHERE image IS NOT NULL")}
+        images = set()
+        for row in self.db.query("SELECT image, slides FROM instagram_posts"):
+            try:
+                slides = json.loads(row["slides"]) if row["slides"] else []
+            except ValueError:
+                slides = []
+            images.update(name for name in [row["image"], *slides] if isinstance(name, str))
         images |= {row["avatar_url"] for row in self.db.query("SELECT avatar_url FROM calendars WHERE avatar_url LIKE 'media/%'")}
         return images
 
