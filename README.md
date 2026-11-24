@@ -57,9 +57,11 @@ on the **Sources** page:
 
 - Instagram accounts are followed from **Sources → Cape Town**. Twice a day
   the app reads each account's six newest posts from Instagram's public
-  embed page, and Claude reads every new post and its picture to tell
+  embed page, and Claude reads every new post and its pictures to tell
   whether it announces an event and when and where it is; those become
-  events in the Cape Town tab. The accounts behind the events Sundry Mag
+  events in the Cape Town tab. A carousel is read slide by slide, so an
+  account that posts a weekly gig guide as pictures gives one event for
+  each gig on it. The accounts behind the events Sundry Mag
   lists are followed automatically, for two months after it last featured
   them, and you can add or remove any account. This needs the Claude Code
   program on the server, signed in; it uses that sign-in and no API key.

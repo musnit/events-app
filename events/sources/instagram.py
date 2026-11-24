@@ -1,7 +1,8 @@
 """An Instagram account's latest posts, from the page Instagram serves for embedding a profile.
 
 ``instagram.com/<account>/embed/`` needs no sign-in. Its script holds a ``contextJSON`` string with
-the account's name and picture and its six newest posts: shortcode, time, caption and picture.
+the account's name and picture and its six newest posts: shortcode, time, caption, picture and,
+for a carousel, each of its slides.
 A post is not an event; ``events.reader`` decides which posts announce one.
 """
 from __future__ import annotations
@@ -20,6 +21,7 @@ USERNAME_RE = re.compile(r"[A-Za-z0-9._]{1,30}\Z")
 RESERVED = {"p", "reel", "reels", "tv", "stories", "explore", "accounts", "about", "developer", "legal", "direct"}
 CONTEXT_RE = re.compile(r'"contextJSON":"((?:[^"\\]|\\.)*)"')
 MAX_CAPTION = 3000
+MAX_SLIDES = 12
 
 
 class InstagramError(Exception):
@@ -51,8 +53,19 @@ def usernames(text: str) -> list[str]:
     return list(found)
 
 
+def _picture(address: object) -> str | None:
+    return address if isinstance(address, str) and address.startswith("https://") else None
+
+
+def _edges(value: object) -> list:
+    edges = value.get("edges") if isinstance(value, dict) else None
+    return edges if isinstance(edges, list) else []
+
+
 def parse_embed(html: str) -> dict:
-    """{"username", "name", "avatar_url", "posts": [{"code", "url", "taken_at", "caption", "image_url"}]}"""
+    """{"username", "name", "avatar_url", "posts": [{"code", "url", "taken_at", "caption", "image_url", "slide_urls"}]}
+
+    ``slide_urls`` are a carousel's pictures in order, the first being the post's own; other posts have none."""
     match = CONTEXT_RE.search(html or "")
     if not match:
         raise InstagramError("Instagram did not list the account's posts")
@@ -74,12 +87,14 @@ def parse_embed(html: str) -> dict:
         edges = ((node.get("edge_media_to_caption") or {}).get("edges") or [{}])
         caption = ((edges[0] or {}).get("node") or {}).get("text") if isinstance(edges[0], dict) else None
         image = node.get("display_url") or node.get("thumbnail_src")
+        slides = [_picture(((edge or {}).get("node") or {}).get("display_url") if isinstance(edge, dict) else None)
+                  for edge in _edges(node.get("edge_sidecar_to_children"))]
         posts.append({"code": node["shortcode"], "url": f"{SITE}/p/{node['shortcode']}/", "taken_at": taken_at,
-                      "caption": str(caption or "")[:MAX_CAPTION].strip(),
-                      "image_url": image if isinstance(image, str) and image.startswith("https://") else None})
+                      "caption": str(caption or "")[:MAX_CAPTION].strip(), "image_url": _picture(image),
+                      "slide_urls": [slide for slide in slides if slide][:MAX_SLIDES]})
     avatar = context.get("profile_pic_url")
     return {"username": context["username"].lower(), "name": clean_text(context.get("full_name")) or None,
-            "avatar_url": avatar if isinstance(avatar, str) and avatar.startswith("https://") else None, "posts": posts}
+            "avatar_url": _picture(avatar), "posts": posts}
 
 
 class InstagramClient:

@@ -159,6 +159,10 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX instagram_posts_username ON instagram_posts (username, taken_at);
     """,
+    """
+    -- A carousel's pictures in order, a JSON list; NULL for a post saved before slides were looked at.
+    ALTER TABLE instagram_posts ADD COLUMN slides TEXT;
+    """,
 ]
 
 

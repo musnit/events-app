@@ -133,7 +133,8 @@ live in a private bucket, so covers go through `partiful.imgix.net`. The persona
   account in the app adds it to meta `instagram_dismissed`, so Sundry does not bring it back.
 - `GET instagram.com/<account>/embed/` needs no sign-in. A script in it holds `"contextJSON":"…"`, a JSON string
   whose `context` has `username`, `full_name`, `profile_pic_url` and `graphql_media`: the six newest posts
-  (`shortcode`, `taken_at_timestamp`, `display_url`, `edge_media_to_caption`). The profile page itself and
+  (`shortcode`, `taken_at_timestamp`, `display_url`, `edge_media_to_caption`, and for a carousel
+  `edge_sidecar_to_children` with each slide's `display_url`). The profile page itself and
   `api/v1/users/web_profile_info` give a signed-out client nothing.
 - A post is not an event. Posts from the last 45 days are saved in `instagram_posts` with their picture, and
   `reader.py` asks Claude which announce an event, once per post (three tries). It runs the Claude Code program
@@ -142,6 +143,11 @@ live in a private bucket, so covers go through `partiful.imgix.net`. The persona
   text, so the run has `--tools Read --restricted --safe-mode --strict-mcp-config --permission-prompts none` (it can
   read those pictures and do nothing else), and `parse_answer` keeps only well-formed events dated from yesterday
   to 120 days ahead. Each account's listings are rebuilt from every saved post, since posts leave Instagram's six.
+- A carousel's slides (twelve at most) are saved in `instagram_posts.slides` and all given to the reader: a weekly gig
+  guide is a slide per day with the gigs written on it, and nothing in its caption. Each event answers with the
+  `picture` it was read from, which becomes its cover. One run takes at most `MAX_POSTS` posts and `MAX_PICTURES`
+  pictures (`reader.batch`); a pull runs until nothing is unread. `slides` is NULL for a post saved before slides
+  were kept; such a post is read again when Instagram still lists it and it turns out to be a carousel.
 - Followed accounts get feeds only while a reader is available (`Sync.instagram_on`); without one the accounts
   stay as calendars and nothing is polled.
 - A weekly list and the organiser's account often announce the same post: the catalog folds listings from

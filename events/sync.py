@@ -689,6 +689,11 @@ class Sync:
                                                    for name, entry in sorted(seen.items()) if name not in dismissed])
         self._enqueue(self.reconcile(), NEW)
 
+    def _keep_slides(self, post: dict) -> list[str]:
+        """Save a carousel's pictures; the ones that could not be fetched are left out."""
+        saved = [self.previews.keep_image(address) for address in post.get("slide_urls") or []]
+        return [name for name in saved if name]
+
     def _pull_instagram(self, feed: Feed) -> None:
         """Save the account's new posts, have Claude read the ones not read yet, and list the events they announce.
         Posts fall off Instagram's list of six, so the listing is built from every saved post."""
@@ -697,19 +702,26 @@ class Sync:
         now = self.store.clock()
         avatar = self.previews.keep_image(page["avatar_url"]) if page.get("avatar_url") else None
         self.store.update_calendar_details({"id": feed.calendar_id, "name": page.get("name"), "avatar_url": avatar})
-        known = {post["code"] for post in self.store.instagram_posts(username)}
+        known = {post["code"]: post for post in self.store.instagram_posts(username)}
         recent = to_iso(now - INSTAGRAM_POST_DAYS * 86400)
         for post in page["posts"]:
             if post["code"] not in known and post["taken_at"] >= recent:
-                image = self.previews.keep_image(post["image_url"]) if post.get("image_url") else None
-                self.store.add_instagram_post(username, post, image)
+                slides = self._keep_slides(post)
+                image = slides[0] if slides else self.previews.keep_image(post["image_url"]) if post.get("image_url") else None
+                self.store.add_instagram_post(username, post, image, slides)
+            elif post["code"] in known and known[post["code"]]["slides"] is None:
+                # Saved when only a post's first picture was kept: a carousel is read again, now with every slide.
+                self.store.set_instagram_slides(post["code"], self._keep_slides(post))
         account = {"username": username, "name": page.get("name") or (self.store.calendar(feed.calendar_id or "") or {}).get("name"),
                    "avatar": avatar or (self.store.calendar(feed.calendar_id or "") or {}).get("avatar_url")}
-        posts = self.store.instagram_posts(username)
-        unread = [p for p in posts if p["events"] is None and p["attempts"] < INSTAGRAM_READ_ATTEMPTS][:reader_mod.MAX_POSTS]
+        today = datetime.fromtimestamp(now, sundry_src.SAST).date()
         failure = None
-        if unread:
-            today = datetime.fromtimestamp(now, sundry_src.SAST).date()
+        while failure is None:
+            posts = self.store.instagram_posts(username)
+            # One run reads a few posts; an account of carousels takes more than one.
+            unread = reader_mod.batch([p for p in posts if p["events"] is None and p["attempts"] < INSTAGRAM_READ_ATTEMPTS])
+            if not unread:
+                break
             self.store.count_instagram_attempt(p["code"] for p in unread)
             try:
                 readings = self.reader.read(account, unread, today)
@@ -718,7 +730,7 @@ class Sync:
             else:
                 for post in unread:
                     self.store.set_instagram_reading(post["code"], readings.get(post["code"], []))
-                posts = self.store.instagram_posts(username)
+        posts = self.store.instagram_posts(username)
         listings = [listing for post in posts for listing in instagram_listings(account, post)]
         if failure is None or listings:
             self.store.replace_listings(feed.key, listings)
@@ -752,10 +764,12 @@ def instagram_listings(account: dict, post: dict) -> list[dict]:
         price = event.get("price") or ""
         notes = [event.get("summary"), f"Cost: {price}" if price and not sundry_src.PLAIN_COST_RE.fullmatch(price) else None]
         identity = f"{post['code']}|{event['date']}|{event['title'].lower()}"
+        # The slide an event is written on shows more of it than the carousel's cover does.
+        picture = event.get("picture") if event.get("picture") in (post.get("slides") or []) else post.get("image")
         listings.append({
             "id": "ig-" + hashlib.sha1(identity.encode()).hexdigest()[:16], "source": "instagram", "name": event["title"],
             "url": url, "start_at": to_iso(start), "end_at": to_iso(end) if end else None, "all_day": all_day,
-            "timezone": sundry_src.TIMEZONE, "cover_url": post.get("image"), "location": location,
+            "timezone": sundry_src.TIMEZONE, "cover_url": picture, "location": location,
             "presenter": {"id": instagram_src.calendar_id(account["username"]), "name": account.get("name") or f"@{account['username']}",
                           "avatar_url": account.get("avatar"), "url": f"{instagram_src.SITE}/{account['username']}/",
                           "description": None},
